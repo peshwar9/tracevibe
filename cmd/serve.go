@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -479,32 +480,81 @@ func (s *Server) getTestFilesForComponent(projectKey, componentKey string) ([]st
 }
 
 func (s *Server) runTestFile(testFile string) (bool, string, error) {
-	// Determine test runner based on file extension
+	// Determine test runner based on file extension and run appropriate commands
 	var cmd *exec.Cmd
+	var workingDir string
 
 	switch {
 	case strings.HasSuffix(testFile, "_test.go"):
-		cmd = exec.Command("go", "test", "-v", testFile)
-	case strings.HasSuffix(testFile, ".test.js") || strings.HasSuffix(testFile, ".spec.js"):
-		cmd = exec.Command("npm", "test", testFile)
-	case strings.HasSuffix(testFile, ".test.py") || strings.HasSuffix(testFile, "_test.py"):
+		// Go tests: run the package directory, not the individual file
+		packageDir := filepath.Dir(testFile)
+		if packageDir == "." || packageDir == "" {
+			packageDir = testFile[:strings.LastIndex(testFile, "/")]
+		}
+
+		// Set working directory to project root and run relative to it
+		workingDir = "."
+		cmd = exec.Command("go", "test", "-v", "./"+packageDir)
+
+	case strings.HasSuffix(testFile, ".test.js") || strings.HasSuffix(testFile, ".spec.js") ||
+		 strings.HasSuffix(testFile, ".test.ts") || strings.HasSuffix(testFile, ".spec.ts"):
+		// JavaScript/TypeScript tests: use npm test or jest directly
+		// Try to detect if it's a frontend project by checking for package.json
+		packageDir := filepath.Dir(testFile)
+		for packageDir != "." && packageDir != "/" {
+			if _, err := os.Stat(filepath.Join(packageDir, "package.json")); err == nil {
+				workingDir = packageDir
+				break
+			}
+			packageDir = filepath.Dir(packageDir)
+		}
+
+		if workingDir == "" {
+			workingDir = "."
+		}
+
+		// Use jest to run specific test file
+		relativeTestFile := testFile
+		if workingDir != "." {
+			if rel, err := filepath.Rel(workingDir, testFile); err == nil {
+				relativeTestFile = rel
+			}
+		}
+		cmd = exec.Command("npx", "jest", relativeTestFile, "--verbose")
+
+	case strings.HasSuffix(testFile, ".test.py") || strings.HasSuffix(testFile, "_test.py") || strings.HasSuffix(testFile, "test_*.py"):
+		// Python tests: use pytest
+		workingDir = "."
 		cmd = exec.Command("python", "-m", "pytest", "-v", testFile)
-	case strings.HasSuffix(testFile, ".test.rs"):
-		cmd = exec.Command("cargo", "test", "--test", strings.TrimSuffix(testFile, ".rs"))
+
 	default:
-		return false, "", fmt.Errorf("unsupported test file format: %s", testFile)
+		return false, "", fmt.Errorf("unsupported test file format: %s (supported: Go _test.go, JS/TS .test/.spec files, Python .test.py/_test.py/test_*.py)", testFile)
+	}
+
+	// Set working directory if specified
+	if workingDir != "" {
+		cmd.Dir = workingDir
 	}
 
 	output, err := cmd.CombinedOutput()
 	outputStr := string(output)
 
+	// Add command info to output for debugging
+	cmdInfo := fmt.Sprintf("Command: %s\nWorking Dir: %s\n\n", strings.Join(cmd.Args, " "), workingDir)
+	outputStr = cmdInfo + outputStr
+
 	if err != nil {
 		// Check if it's a test failure vs execution error
-		if strings.Contains(strings.ToLower(outputStr), "failed") ||
-		   strings.Contains(strings.ToLower(outputStr), "error") {
+		exitCode := -1
+		if exitError, ok := err.(*exec.ExitError); ok {
+			exitCode = exitError.ExitCode()
+		}
+
+		// Exit code 1 usually means test failures, not execution errors
+		if exitCode == 1 && (strings.Contains(outputStr, "FAIL") || strings.Contains(outputStr, "failed")) {
 			return false, outputStr, nil // Test ran but failed
 		}
-		return false, outputStr, err // Execution error
+		return false, outputStr, fmt.Errorf("execution failed (exit code %d): %v", exitCode, err)
 	}
 
 	return true, outputStr, nil
