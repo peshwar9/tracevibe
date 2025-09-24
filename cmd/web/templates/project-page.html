@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.Title}} - TraceVibe</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f8fafc; color: #1e293b; line-height: 1.6; }
+        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 1rem 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .header-content { max-width: 1200px; margin: 0 auto; padding: 0 1rem; display: flex; justify-content: space-between; align-items: center; }
+        .logo { font-size: 1.5rem; font-weight: 700; }
+        .nav { display: flex; gap: 2rem; }
+        .nav a { color: white; text-decoration: none; opacity: 0.9; transition: opacity 0.2s; }
+        .nav a:hover { opacity: 1; }
+        .container { max-width: 1200px; margin: 2rem auto; padding: 0 1rem; }
+        .card { background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); overflow: hidden; }
+        .card-header { background: #f1f5f9; padding: 1rem 1.5rem; border-bottom: 1px solid #e2e8f0; }
+        .card-title { font-size: 1.25rem; font-weight: 600; color: #1e293b; }
+        .card-content { padding: 1.5rem; }
+        .badge { display: inline-block; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 500; }
+        .badge-success { background-color: #dcfce7; color: #166534; }
+        .badge-warning { background-color: #fef3c7; color: #92400e; }
+        .badge-info { background-color: #dbeafe; color: #1e40af; }
+        .breadcrumb { display: flex; gap: 0.5rem; margin-bottom: 1rem; color: #6b7280; }
+        .breadcrumb a { color: #3b82f6; text-decoration: none; }
+        .breadcrumb a:hover { text-decoration: underline; }
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+        .stat-card { background: white; padding: 1.5rem; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); text-align: center; }
+        .stat-number { font-size: 2rem; font-weight: 700; color: #3b82f6; }
+        .stat-label { color: #6b7280; font-size: 0.875rem; margin-top: 0.5rem; }
+        .tree { list-style: none; padding-left: 0; }
+        .tree li { margin: 0.5rem 0; }
+        .tree .tree { padding-left: 2rem; border-left: 1px solid #e2e8f0; margin-left: 1rem; }
+        .tree-item { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem; border-radius: 4px; transition: background-color 0.2s; }
+        .tree-item:hover { background-color: #f1f5f9; }
+        .tree-toggle { width: 1rem; height: 1rem; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 0.75rem; color: #6b7280; }
+        .error { background-color: #fef2f2; border: 1px solid #fecaca; color: #dc2626; padding: 1rem; border-radius: 6px; margin-bottom: 1rem; }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="header-content">
+            <div class="logo">TraceVibe</div>
+            <nav class="nav">
+                <a href="/">Dashboard</a>
+                <a href="/projects">Projects</a>
+                <a href="/about">About</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <div class="breadcrumb">
+            <a href="/">Dashboard</a>
+            <span> / </span>
+            <span>{{.Project.Name}}</span>
+        </div>
+
+        {{if .Error}}
+        <div class="error">{{.Error}}</div>
+        {{end}}
+
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-number">{{len .Components}}</div>
+                <div class="stat-label">Components</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">{{.ScopeCount}}</div>
+                <div class="stat-label">Scope Requirements</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">{{.UserStoryCount}}</div>
+                <div class="stat-label">User Stories</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">{{.TechSpecCount}}</div>
+                <div class="stat-label">Tech Specs</div>
+            </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 2rem;">
+            <!-- Components List -->
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">System Components</h2>
+                </div>
+                <div class="card-content">
+                    {{if .Components}}
+                    <ul class="tree">
+                        {{range .Components}}
+                        <li>
+                            <div class="tree-item">
+                                <span class="tree-toggle">📦</span>
+                                <a href="/projects/{{$.Project.ProjectKey}}/components/{{.ComponentKey}}" style="text-decoration: none; color: inherit;">
+                                    <strong>{{.Name}}</strong>
+                                </a>
+                                <span class="badge badge-info">{{.ComponentType}}</span>
+                            </div>
+                            <div style="margin-left: 2rem; margin-top: 0.5rem; font-size: 0.875rem; color: #6b7280;">
+                                {{.TotalRequirements}} requirements • {{.TestCaseCount}} tests
+                            </div>
+                        </li>
+                        {{end}}
+                    </ul>
+                    {{else}}
+                    <p style="color: #6b7280; text-align: center; padding: 2rem;">No components found.</p>
+                    {{end}}
+                </div>
+            </div>
+
+            <!-- Requirements Tree -->
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">Requirements Hierarchy</h2>
+                </div>
+                <div class="card-content">
+                    {{if .Requirements}}
+                    <ul class="tree">
+                        {{range .Requirements}}
+                        <li>
+                            <div class="tree-item">
+                                <span class="tree-toggle">{{if .Children}}▼{{else}}📄{{end}}</span>
+                                <div style="flex: 1;">
+                                    <strong>{{.Title}}</strong>
+                                    <div style="font-size: 0.75rem; color: #6b7280;">
+                                        {{.RequirementKey}} • {{.RequirementType}} • {{.Category}}
+                                    </div>
+                                </div>
+                                <span class="badge {{if eq .Status "completed"}}badge-success{{else if eq .Status "in_progress"}}badge-warning{{else}}badge-info{{end}}">
+                                    {{.Status}}
+                                </span>
+                            </div>
+                        </li>
+                        {{end}}
+                    </ul>
+                    {{else}}
+                    <p style="color: #6b7280; text-align: center; padding: 2rem;">No requirements found.</p>
+                    {{end}}
+                </div>
+            </div>
+        </div>
+
+        <!-- Project Info -->
+        <div class="card" style="margin-top: 2rem;">
+            <div class="card-header">
+                <h2 class="card-title">Project Information</h2>
+            </div>
+            <div class="card-content">
+                <dl style="display: grid; grid-template-columns: 200px 1fr; gap: 1rem;">
+                    <dt style="font-weight: 600; color: #374151;">Project Key:</dt>
+                    <dd>{{.Project.ProjectKey}}</dd>
+
+                    <dt style="font-weight: 600; color: #374151;">Name:</dt>
+                    <dd>{{.Project.Name}}</dd>
+
+                    {{if .Project.Description}}
+                    <dt style="font-weight: 600; color: #374151;">Description:</dt>
+                    <dd>{{.Project.Description}}</dd>
+                    {{end}}
+
+                    {{if .Project.RepositoryURL}}
+                    <dt style="font-weight: 600; color: #374151;">Repository:</dt>
+                    <dd><a href="{{.Project.RepositoryURL}}" target="_blank" style="color: #3b82f6;">{{.Project.RepositoryURL}}</a></dd>
+                    {{end}}
+
+                    <dt style="font-weight: 600; color: #374151;">Status:</dt>
+                    <dd><span class="badge badge-success">{{.Project.Status}}</span></dd>
+
+                    <dt style="font-weight: 600; color: #374151;">Created:</dt>
+                    <dd>{{.Project.CreatedAt}}</dd>
+                </dl>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Toggle tree items
+        document.addEventListener('click', function(e) {
+            if (e.target.classList.contains('tree-toggle')) {
+                const treeItem = e.target.closest('li');
+                const childTree = treeItem.querySelector('.tree');
+                if (childTree) {
+                    childTree.style.display = childTree.style.display === 'none' ? 'block' : 'none';
+                    e.target.textContent = childTree.style.display === 'none' ? '▶' : '▼';
+                }
+            }
+        });
+    </script>
+</body>
+</html>

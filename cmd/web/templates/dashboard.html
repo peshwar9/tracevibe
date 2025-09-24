@@ -1,0 +1,89 @@
+{{define "content"}}
+<div class="breadcrumb">
+    <span>Dashboard</span>
+</div>
+
+{{if .Error}}
+<div class="error">{{.Error}}</div>
+{{end}}
+
+{{if .Projects}}
+<div class="stats">
+    <div class="stat-card">
+        <div class="stat-number">{{len .Projects}}</div>
+        <div class="stat-label">Total Projects</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-number">{{.TotalComponents}}</div>
+        <div class="stat-label">System Components</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-number">{{.TotalRequirements}}</div>
+        <div class="stat-label">Requirements</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-number">{{.TotalTestCases}}</div>
+        <div class="stat-label">Test Cases</div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">Projects</h2>
+    </div>
+    <div class="card-content">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Project</th>
+                    <th>Components</th>
+                    <th>Requirements</th>
+                    <th>Test Cases</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Projects}}
+                <tr>
+                    <td>
+                        <div>
+                            <strong>{{.Name}}</strong>
+                            <div style="font-size: 0.875rem; color: #6b7280;">{{.ProjectKey}}</div>
+                        </div>
+                    </td>
+                    <td>{{.ComponentCount}}</td>
+                    <td>{{.RequirementCount}}</td>
+                    <td>{{.TestCaseCount}}</td>
+                    <td>
+                        <span class="badge badge-success">{{.Status}}</span>
+                    </td>
+                    <td>
+                        <a href="/projects/{{.ProjectKey}}" class="btn btn-primary">View Details</a>
+                    </td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+</div>
+{{else}}
+<div class="card">
+    <div class="card-content" style="text-align: center; padding: 3rem;">
+        <h2 style="color: #6b7280; margin-bottom: 1rem;">No Projects Found</h2>
+        <p style="color: #9ca3af; margin-bottom: 2rem;">
+            Import your first RTM project to get started.
+        </p>
+        <div style="background: #f8fafc; padding: 1.5rem; border-radius: 8px; margin: 2rem 0;">
+            <h3 style="color: #374151; margin-bottom: 1rem;">Quick Start</h3>
+            <ol style="text-align: left; color: #6b7280; line-height: 1.8;">
+                <li>Generate guidelines: <code style="background: #e5e7eb; padding: 0.25rem;">tracevibe guidelines</code></li>
+                <li>Create RTM data with an LLM using the guidelines</li>
+                <li>Import the data: <code style="background: #e5e7eb; padding: 0.25rem;">tracevibe import your-rtm.yaml --project your-project</code></li>
+                <li>View in UI: <code style="background: #e5e7eb; padding: 0.25rem;">tracevibe serve</code></li>
+            </ol>
+        </div>
+    </div>
+</div>
+{{end}}
+{{end}}

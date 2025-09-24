@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.Title}} - TraceVibe</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f8fafc; color: #1e293b; line-height: 1.6; }
+        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 1rem 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .header-content { max-width: 1200px; margin: 0 auto; padding: 0 1rem; display: flex; justify-content: space-between; align-items: center; }
+        .logo { font-size: 1.5rem; font-weight: 700; }
+        .nav { display: flex; gap: 2rem; }
+        .nav a { color: white; text-decoration: none; opacity: 0.9; transition: opacity 0.2s; }
+        .nav a:hover { opacity: 1; }
+        .container { max-width: 1200px; margin: 2rem auto; padding: 0 1rem; }
+        .card { background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); overflow: hidden; }
+        .card-header { background: #f1f5f9; padding: 1rem 1.5rem; border-bottom: 1px solid #e2e8f0; }
+        .card-title { font-size: 1.25rem; font-weight: 600; color: #1e293b; }
+        .card-content { padding: 1.5rem; }
+        .badge { display: inline-block; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 500; }
+        .badge-success { background-color: #dcfce7; color: #166534; }
+        .badge-warning { background-color: #fef3c7; color: #92400e; }
+        .badge-info { background-color: #dbeafe; color: #1e40af; }
+        .breadcrumb { display: flex; gap: 0.5rem; margin-bottom: 1rem; color: #6b7280; }
+        .breadcrumb a { color: #3b82f6; text-decoration: none; }
+        .breadcrumb a:hover { text-decoration: underline; }
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+        .stat-card { background: white; padding: 1.5rem; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); text-align: center; }
+        .stat-number { font-size: 2rem; font-weight: 700; color: #3b82f6; }
+        .stat-label { color: #6b7280; font-size: 0.875rem; margin-top: 0.5rem; }
+        .tree { list-style: none; padding-left: 0; }
+        .tree li { margin: 0.5rem 0; }
+        .tree .tree { padding-left: 2rem; border-left: 1px solid #e2e8f0; margin-left: 1rem; }
+        .tree-item { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem; border-radius: 4px; transition: background-color 0.2s; }
+        .tree-item:hover { background-color: #f1f5f9; }
+        .error { background-color: #fef2f2; border: 1px solid #fecaca; color: #dc2626; padding: 1rem; border-radius: 6px; margin-bottom: 1rem; }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="header-content">
+            <div class="logo">TraceVibe</div>
+            <nav class="nav">
+                <a href="/">Dashboard</a>
+                <a href="/projects">Projects</a>
+                <a href="/about">About</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <div class="breadcrumb">
+            <a href="/">Dashboard</a>
+            <span> / </span>
+            <a href="/projects/{{.Project.ProjectKey}}">{{.Project.Name}}</a>
+            <span> / </span>
+            <span>{{.Component.Name}}</span>
+        </div>
+
+        {{if .Error}}
+        <div class="error">{{.Error}}</div>
+        {{end}}
+
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-number">{{.ScopeCount}}</div>
+                <div class="stat-label">Scope Requirements</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">{{.UserStoryCount}}</div>
+                <div class="stat-label">User Stories</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">{{.TechSpecCount}}</div>
+                <div class="stat-label">Tech Specs</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">{{.TestCaseCount}}</div>
+                <div class="stat-label">Test Cases</div>
+            </div>
+        </div>
+
+        <!-- Component Info -->
+        <div class="card" style="margin-bottom: 2rem;">
+            <div class="card-header">
+                <h2 class="card-title">{{.Component.Name}}</h2>
+            </div>
+            <div class="card-content">
+                <dl style="display: grid; grid-template-columns: 200px 1fr; gap: 1rem;">
+                    <dt style="font-weight: 600; color: #374151;">Component Key:</dt>
+                    <dd>{{.Component.ComponentKey}}</dd>
+
+                    <dt style="font-weight: 600; color: #374151;">Type:</dt>
+                    <dd><span class="badge badge-info">{{.Component.ComponentType}}</span></dd>
+
+                    {{if .Component.Technology}}
+                    <dt style="font-weight: 600; color: #374151;">Technology:</dt>
+                    <dd>{{.Component.Technology}}</dd>
+                    {{end}}
+
+                    {{if .Component.Description}}
+                    <dt style="font-weight: 600; color: #374151;">Description:</dt>
+                    <dd>{{.Component.Description}}</dd>
+                    {{end}}
+                </dl>
+            </div>
+        </div>
+
+        <!-- Requirements Tree -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Requirements & Implementation</h2>
+            </div>
+            <div class="card-content">
+                {{if .Requirements}}
+                <ul class="tree">
+                    {{range .Requirements}}
+                    <li style="margin-bottom: 2rem;">
+                        <div class="tree-item" style="background: #f8fafc; padding: 1rem; border-radius: 6px;">
+                            <div style="flex: 1;">
+                                <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem;">
+                                    <strong style="font-size: 1.1rem;">{{.Title}}</strong>
+                                    <span class="badge badge-warning">SCOPE</span>
+                                    <span class="badge {{if eq .Status "completed"}}badge-success{{else if eq .Status "in_progress"}}badge-warning{{else}}badge-info{{end}}">
+                                        {{.Status}}
+                                    </span>
+                                </div>
+                                <div style="font-size: 0.875rem; color: #6b7280;">
+                                    {{.RequirementKey}} • {{.Category}}
+                                </div>
+                                {{if .Description}}
+                                <div style="margin-top: 0.5rem; color: #4b5563;">{{.Description}}</div>
+                                {{end}}
+                            </div>
+                        </div>
+
+                        {{if .Implementation}}
+                        <div style="margin-top: 1rem; margin-left: 2rem;">
+                            <h4 style="font-size: 0.875rem; font-weight: 600; color: #374151; margin-bottom: 0.5rem;">Implementation:</h4>
+                            {{range .Implementation}}
+                            <div style="background: #f9fafb; padding: 0.5rem; border-radius: 4px; margin-bottom: 0.5rem; font-family: monospace; font-size: 0.8rem;">
+                                <div style="color: #6366f1; font-weight: 500;">{{.Layer}}: {{.FilePath}}</div>
+                                {{if .Functions}}
+                                <div style="color: #059669; margin-top: 0.25rem;">
+                                    Functions: {{range $i, $fn := .Functions}}{{if $i}}, {{end}}{{$fn}}{{end}}
+                                </div>
+                                {{end}}
+                            </div>
+                            {{end}}
+                        </div>
+                        {{end}}
+
+                        {{if .TestCases}}
+                        <div style="margin-top: 1rem; margin-left: 2rem;">
+                            <h4 style="font-size: 0.875rem; font-weight: 600; color: #374151; margin-bottom: 0.5rem;">Test Cases:</h4>
+                            {{range .TestCases}}
+                            <div style="background: #fef3c7; padding: 0.5rem; border-radius: 4px; margin-bottom: 0.25rem; font-family: monospace; font-size: 0.8rem;">
+                                <div style="color: #92400e; font-weight: 500;">{{.FilePath}}</div>
+                                <div style="color: #b45309; margin-top: 0.25rem;">{{.TestName}} ({{.TestType}})</div>
+                            </div>
+                            {{end}}
+                        </div>
+                        {{end}}
+                    </li>
+                    {{end}}
+                </ul>
+                {{else}}
+                <p style="color: #6b7280; text-align: center; padding: 2rem;">No requirements found for this component.</p>
+                {{end}}
+            </div>
+        </div>
+    </main>
+</body>
+</html>

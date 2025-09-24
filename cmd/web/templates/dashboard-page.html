@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.Title}} - TraceVibe</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f8fafc; color: #1e293b; line-height: 1.6; }
+        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 1rem 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .header-content { max-width: 1200px; margin: 0 auto; padding: 0 1rem; display: flex; justify-content: space-between; align-items: center; }
+        .logo { font-size: 1.5rem; font-weight: 700; }
+        .nav { display: flex; gap: 2rem; }
+        .nav a { color: white; text-decoration: none; opacity: 0.9; transition: opacity 0.2s; }
+        .nav a:hover { opacity: 1; }
+        .container { max-width: 1200px; margin: 2rem auto; padding: 0 1rem; }
+        .card { background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); overflow: hidden; }
+        .card-header { background: #f1f5f9; padding: 1rem 1.5rem; border-bottom: 1px solid #e2e8f0; }
+        .card-title { font-size: 1.25rem; font-weight: 600; color: #1e293b; }
+        .card-content { padding: 1.5rem; }
+        .btn { display: inline-block; padding: 0.5rem 1rem; border-radius: 6px; text-decoration: none; font-weight: 500; transition: all 0.2s; border: none; cursor: pointer; }
+        .btn-primary { background-color: #3b82f6; color: white; }
+        .btn-primary:hover { background-color: #2563eb; }
+        .table { width: 100%; border-collapse: collapse; }
+        .table th, .table td { text-align: left; padding: 0.75rem; border-bottom: 1px solid #e2e8f0; }
+        .table th { background-color: #f8fafc; font-weight: 600; color: #374151; }
+        .table tbody tr:hover { background-color: #f9fafb; }
+        .badge { display: inline-block; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 500; }
+        .badge-success { background-color: #dcfce7; color: #166534; }
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+        .stat-card { background: white; padding: 1.5rem; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); text-align: center; }
+        .stat-number { font-size: 2rem; font-weight: 700; color: #3b82f6; }
+        .stat-label { color: #6b7280; font-size: 0.875rem; margin-top: 0.5rem; }
+        .error { background-color: #fef2f2; border: 1px solid #fecaca; color: #dc2626; padding: 1rem; border-radius: 6px; margin-bottom: 1rem; }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="header-content">
+            <div class="logo">TraceVibe</div>
+            <nav class="nav">
+                <a href="/">Dashboard</a>
+                <a href="/projects">Projects</a>
+                <a href="/about">About</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <div class="breadcrumb">
+            <span>Dashboard</span>
+        </div>
+
+        {{if .Error}}
+        <div class="error">{{.Error}}</div>
+        {{end}}
+
+        {{if .Projects}}
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-number">{{len .Projects}}</div>
+                <div class="stat-label">Total Projects</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">{{.TotalComponents}}</div>
+                <div class="stat-label">System Components</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">{{.TotalRequirements}}</div>
+                <div class="stat-label">Requirements</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">{{.TotalTestCases}}</div>
+                <div class="stat-label">Test Cases</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Projects</h2>
+            </div>
+            <div class="card-content">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Project</th>
+                            <th>Components</th>
+                            <th>Requirements</th>
+                            <th>Test Cases</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{range .Projects}}
+                        <tr>
+                            <td>
+                                <div>
+                                    <strong>{{.Name}}</strong>
+                                    <div style="font-size: 0.875rem; color: #6b7280;">{{.ProjectKey}}</div>
+                                </div>
+                            </td>
+                            <td>{{.ComponentCount}}</td>
+                            <td>{{.RequirementCount}}</td>
+                            <td>{{.TestCaseCount}}</td>
+                            <td>
+                                <span class="badge badge-success">{{.Status}}</span>
+                            </td>
+                            <td>
+                                <a href="/projects/{{.ProjectKey}}" class="btn btn-primary">View Details</a>
+                            </td>
+                        </tr>
+                        {{end}}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {{else}}
+        <div class="card">
+            <div class="card-content" style="text-align: center; padding: 3rem;">
+                <h2 style="color: #6b7280; margin-bottom: 1rem;">No Projects Found</h2>
+                <p style="color: #9ca3af; margin-bottom: 2rem;">
+                    Import your first RTM project to get started.
+                </p>
+                <div style="background: #f8fafc; padding: 1.5rem; border-radius: 8px; margin: 2rem 0;">
+                    <h3 style="color: #374151; margin-bottom: 1rem;">Quick Start</h3>
+                    <ol style="text-align: left; color: #6b7280; line-height: 1.8;">
+                        <li>Generate guidelines: <code style="background: #e5e7eb; padding: 0.25rem;">tracevibe guidelines</code></li>
+                        <li>Create RTM data with an LLM using the guidelines</li>
+                        <li>Import the data: <code style="background: #e5e7eb; padding: 0.25rem;">tracevibe import your-rtm.yaml --project your-project</code></li>
+                        <li>View in UI: <code style="background: #e5e7eb; padding: 0.25rem;">tracevibe serve</code></li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+        {{end}}
+    </main>
+</body>
+</html>

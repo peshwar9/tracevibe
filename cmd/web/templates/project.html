@@ -1,0 +1,164 @@
+{{define "content"}}
+<div class="breadcrumb">
+    <a href="/">Dashboard</a>
+    <span> / </span>
+    <span>{{.Project.Name}}</span>
+</div>
+
+{{if .Error}}
+<div class="error">{{.Error}}</div>
+{{end}}
+
+<div class="stats">
+    <div class="stat-card">
+        <div class="stat-number">{{len .Components}}</div>
+        <div class="stat-label">Components</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-number">{{.ScopeCount}}</div>
+        <div class="stat-label">Scope Requirements</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-number">{{.UserStoryCount}}</div>
+        <div class="stat-label">User Stories</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-number">{{.TechSpecCount}}</div>
+        <div class="stat-label">Tech Specs</div>
+    </div>
+</div>
+
+<div style="display: grid; grid-template-columns: 1fr 2fr; gap: 2rem;">
+    <!-- Components List -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">System Components</h2>
+        </div>
+        <div class="card-content">
+            {{if .Components}}
+            <ul class="tree">
+                {{range .Components}}
+                <li>
+                    <div class="tree-item">
+                        <span class="tree-toggle">📦</span>
+                        <a href="/projects/{{$.Project.ProjectKey}}/components/{{.ComponentKey}}" style="text-decoration: none; color: inherit;">
+                            <strong>{{.Name}}</strong>
+                        </a>
+                        <span class="badge badge-info">{{.ComponentType}}</span>
+                    </div>
+                    <div style="margin-left: 2rem; margin-top: 0.5rem; font-size: 0.875rem; color: #6b7280;">
+                        {{.TotalRequirements}} requirements • {{.TestCaseCount}} tests
+                    </div>
+                </li>
+                {{end}}
+            </ul>
+            {{else}}
+            <p style="color: #6b7280; text-align: center; padding: 2rem;">No components found.</p>
+            {{end}}
+        </div>
+    </div>
+
+    <!-- Requirements Tree -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Requirements Hierarchy</h2>
+        </div>
+        <div class="card-content">
+            {{if .Requirements}}
+            <ul class="tree">
+                {{range .Requirements}}
+                <li>
+                    <div class="tree-item">
+                        <span class="tree-toggle">{{if .Children}}▼{{else}}📄{{end}}</span>
+                        <div style="flex: 1;">
+                            <strong>{{.Title}}</strong>
+                            <div style="font-size: 0.75rem; color: #6b7280;">
+                                {{.RequirementKey}} • {{.RequirementType}} • {{.Category}}
+                            </div>
+                        </div>
+                        <span class="badge {{if eq .Status "completed"}}badge-success{{else if eq .Status "in_progress"}}badge-warning{{else}}badge-info{{end}}">
+                            {{.Status}}
+                        </span>
+                    </div>
+                    {{if .Children}}
+                    <ul class="tree">
+                        {{range .Children}}
+                        <li>
+                            <div class="tree-item">
+                                <span class="tree-toggle">{{if .Children}}▼{{else}}📄{{end}}</span>
+                                <div style="flex: 1;">
+                                    <strong>{{.Title}}</strong>
+                                    <div style="font-size: 0.75rem; color: #6b7280;">
+                                        {{.RequirementKey}} • {{.RequirementType}}
+                                    </div>
+                                </div>
+                                <span class="badge {{if eq .Status "completed"}}badge-success{{else if eq .Status "in_progress"}}badge-warning{{else}}badge-info{{end}}">
+                                    {{.Status}}
+                                </span>
+                            </div>
+                            {{if .Children}}
+                            <ul class="tree">
+                                {{range .Children}}
+                                <li>
+                                    <div class="tree-item">
+                                        <span class="tree-toggle">📋</span>
+                                        <div style="flex: 1;">
+                                            <strong>{{.Title}}</strong>
+                                            <div style="font-size: 0.75rem; color: #6b7280;">
+                                                {{.RequirementKey}} • {{.RequirementType}}
+                                            </div>
+                                        </div>
+                                        <span class="badge {{if eq .Status "completed"}}badge-success{{else if eq .Status "in_progress"}}badge-warning{{else}}badge-info{{end}}">
+                                            {{.Status}}
+                                        </span>
+                                    </div>
+                                </li>
+                                {{end}}
+                            </ul>
+                            {{end}}
+                        </li>
+                        {{end}}
+                    </ul>
+                    {{end}}
+                </li>
+                {{end}}
+            </ul>
+            {{else}}
+            <p style="color: #6b7280; text-align: center; padding: 2rem;">No requirements found.</p>
+            {{end}}
+        </div>
+    </div>
+</div>
+
+<!-- Project Info -->
+<div class="card" style="margin-top: 2rem;">
+    <div class="card-header">
+        <h2 class="card-title">Project Information</h2>
+    </div>
+    <div class="card-content">
+        <dl style="display: grid; grid-template-columns: 200px 1fr; gap: 1rem;">
+            <dt style="font-weight: 600; color: #374151;">Project Key:</dt>
+            <dd>{{.Project.ProjectKey}}</dd>
+
+            <dt style="font-weight: 600; color: #374151;">Name:</dt>
+            <dd>{{.Project.Name}}</dd>
+
+            {{if .Project.Description}}
+            <dt style="font-weight: 600; color: #374151;">Description:</dt>
+            <dd>{{.Project.Description}}</dd>
+            {{end}}
+
+            {{if .Project.RepositoryURL}}
+            <dt style="font-weight: 600; color: #374151;">Repository:</dt>
+            <dd><a href="{{.Project.RepositoryURL}}" target="_blank" style="color: #3b82f6;">{{.Project.RepositoryURL}}</a></dd>
+            {{end}}
+
+            <dt style="font-weight: 600; color: #374151;">Status:</dt>
+            <dd><span class="badge badge-success">{{.Project.Status}}</span></dd>
+
+            <dt style="font-weight: 600; color: #374151;">Created:</dt>
+            <dd>{{.Project.CreatedAt}}</dd>
+        </dl>
+    </div>
+</div>
+{{end}}
