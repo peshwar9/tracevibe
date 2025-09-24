@@ -1,0 +1,142 @@
+name: Build macOS Binaries
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., v1.0.0)'
+        required: true
+        type: string
+
+jobs:
+  build:
+    name: Build macOS Binaries
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        include:
+          - goarch: amd64
+            suffix: darwin-amd64
+          - goarch: arm64
+            suffix: darwin-arm64
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+          check-latest: true
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Build binary
+        env:
+          GOOS: darwin
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 1
+        run: |
+          # Build the binary
+          go build -v -ldflags="-s -w -X main.version=${{ github.event.inputs.version }}" -o tracevibe-${{ matrix.suffix }}
+
+      - name: Create tarball
+        run: |
+          mkdir -p dist
+          tar -czf dist/tracevibe-${{ matrix.suffix }}.tar.gz tracevibe-${{ matrix.suffix }}
+          cd dist
+          shasum -a 256 tracevibe-${{ matrix.suffix }}.tar.gz > tracevibe-${{ matrix.suffix }}.tar.gz.sha256
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: tracevibe-${{ matrix.suffix }}
+          path: dist/*
+          retention-days: 30
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release-assets
+          find artifacts -type f \( -name "*.tar.gz" -o -name "*.sha256" \) -exec cp {} release-assets/ \;
+          ls -la release-assets/
+
+      - name: Generate release notes
+        id: release_notes
+        run: |
+          cat > release-notes.md << 'EOF'
+          ## 🚀 TraceVibe ${{ github.event.inputs.version }}
+
+          ### What's New
+          - Requirements Traceability Matrix (RTM) management
+          - SQLite-based storage with embedded web UI
+          - LLM-assisted RTM generation with guidelines
+          - Hierarchical requirements: Scope → User Stories → Tech Specs
+          - Import/export functionality for JSON/YAML formats
+          - Test coverage mapping and traceability
+
+          ### Installation
+
+          #### Quick Install (Recommended)
+          ```bash
+          # macOS
+          curl -fsSL https://raw.githubusercontent.com/peshwar9/tracevibe/main/install.sh | bash
+
+          # Or download binary directly below
+          ```
+
+          #### Manual Install
+          1. Download the appropriate binary for your platform
+          2. Make it executable: `chmod +x tracevibe-*`
+          3. Move to PATH: `sudo mv tracevibe-* /usr/local/bin/tracevibe`
+
+          ### Platform Support
+          - ✅ macOS Intel (darwin-amd64)
+          - ✅ macOS Apple Silicon (darwin-arm64)
+
+          ### Usage
+          ```bash
+          # Generate RTM guidelines
+          tracevibe guidelines -o rtm-guidelines.md
+
+          # Import RTM data
+          tracevibe import project-rtm.json --project myproject
+
+          # Start web UI
+          tracevibe serve
+          ```
+
+          ### Checksums
+          All binaries include SHA256 checksums for verification.
+          EOF
+
+          echo "notes<<EOF" >> $GITHUB_OUTPUT
+          cat release-notes.md >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.version }}
+          name: TraceVibe ${{ github.event.inputs.version }}
+          body: ${{ steps.release_notes.outputs.notes }}
+          draft: false
+          prerelease: ${{ contains(github.event.inputs.version, '-') }}
+          files: release-assets/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
