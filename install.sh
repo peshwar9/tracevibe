@@ -22,9 +22,6 @@ detect_platform() {
     ARCH=$(uname -m)
 
     case "$OS" in
-        linux)
-            PLATFORM="linux"
-            ;;
         darwin)
             PLATFORM="darwin"
             ;;
@@ -33,6 +30,8 @@ detect_platform() {
             ;;
         *)
             echo -e "${RED}Unsupported OS: $OS${NC}"
+            echo "TraceVibe binaries are available for macOS and Windows only."
+            echo "For other platforms, please build from source: https://github.com/$REPO"
             exit 1
             ;;
     esac
@@ -155,7 +154,7 @@ main() {
 
     echo
     echo "🚀 Get started with TraceVibe:"
-    echo "  1. Generate guidelines: tracevibe guidelines --with-prompt"
+    echo "  1. Generate guidelines: tracevibe guidelines -o rtm-guidelines.md"
     echo "  2. Import RTM data: tracevibe import <file> --project <name>"
     echo "  3. Start web UI: tracevibe serve"
     echo
