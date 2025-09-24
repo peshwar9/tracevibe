@@ -6,10 +6,18 @@ import (
 
 // RTMData represents the complete RTM structure from YAML/JSON import
 type RTMData struct {
+	Metadata         RTMMetadata        `json:"metadata" yaml:"metadata"`
 	Project          Project            `json:"project" yaml:"project"`
-	SystemComponents []SystemComponent  `json:"system_components" yaml:"system_components"`
+	SystemComponents []SystemComponent  `json:"components" yaml:"components"`
 	Requirements     []Requirement      `json:"requirements" yaml:"requirements"`
 	APIEndpoints     []APIEndpoint      `json:"api_endpoints,omitempty" yaml:"api_endpoints,omitempty"`
+}
+
+// RTMMetadata represents the metadata wrapper in the JSON
+type RTMMetadata struct {
+	GeneratedAt string  `json:"generated_at" yaml:"generated_at"`
+	GeneratedBy string  `json:"generated_by" yaml:"generated_by"`
+	Project     Project `json:"project" yaml:"project"`
 }
 
 type Project struct {
@@ -25,17 +33,20 @@ type Project struct {
 type SystemComponent struct {
 	ID            string `json:"id" yaml:"id"`
 	Name          string `json:"name" yaml:"name"`
-	ComponentType string `json:"component_type" yaml:"component_type"`
+	ComponentType string `json:"type" yaml:"type"`
+	DeploymentUnit string `json:"deployment_unit,omitempty" yaml:"deployment_unit,omitempty"`
+	Path          string `json:"path,omitempty" yaml:"path,omitempty"`
 	Technology    string `json:"technology,omitempty" yaml:"technology,omitempty"`
 	Description   string `json:"description,omitempty" yaml:"description,omitempty"`
+	EntryPoint    string `json:"entry_point,omitempty" yaml:"entry_point,omitempty"`
 	BasePath      string `json:"base_path,omitempty" yaml:"base_path,omitempty"`
 }
 
 type Requirement struct {
 	ID               string                `json:"id" yaml:"id"`
 	ComponentID      string                `json:"component_id" yaml:"component_id"`
-	RequirementType  string                `json:"requirement_type" yaml:"requirement_type"` // scope, user_story, tech_spec
-	Title            string                `json:"title" yaml:"title"`
+	RequirementType  string                `json:"type" yaml:"type"` // scope, user_story, tech_spec
+	Title            string                `json:"name" yaml:"name"`
 	Description      string                `json:"description,omitempty" yaml:"description,omitempty"`
 	Category         string                `json:"category" yaml:"category"`
 	Priority         string                `json:"priority,omitempty" yaml:"priority,omitempty"`
@@ -43,7 +54,7 @@ type Requirement struct {
 	AcceptanceCriteria []string            `json:"acceptance_criteria,omitempty" yaml:"acceptance_criteria,omitempty"`
 	Children         []Requirement         `json:"children,omitempty" yaml:"children,omitempty"`
 	Implementation   *Implementation       `json:"implementation,omitempty" yaml:"implementation,omitempty"`
-	Tests            *TestCoverage         `json:"tests,omitempty" yaml:"tests,omitempty"`
+	Tests            *TestCoverage         `json:"test_coverage,omitempty" yaml:"test_coverage,omitempty"`
 }
 
 type Implementation struct {

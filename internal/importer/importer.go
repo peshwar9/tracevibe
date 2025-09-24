@@ -51,6 +51,11 @@ func (imp *Importer) ImportRTMFile(filePath, projectKey string, overwrite bool) 
 		return fmt.Errorf("unsupported file format: %s (use .json, .yaml, or .yml)", ext)
 	}
 
+	// Use project from metadata if available, otherwise from top level
+	if rtmData.Metadata.Project.ID != "" {
+		rtmData.Project = rtmData.Metadata.Project
+	}
+
 	// Override project key if provided via CLI
 	if projectKey != "" {
 		rtmData.Project.ID = projectKey
