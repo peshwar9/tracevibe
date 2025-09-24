@@ -127,13 +127,12 @@ jobs:
           echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.event.inputs.version }}
-          name: TraceVibe ${{ github.event.inputs.version }} (Windows)
-          body: ${{ steps.release_notes.outputs.notes }}
-          draft: false
-          prerelease: ${{ contains(github.event.inputs.version, '-') }}
-          files: release-assets/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Create the release using GitHub CLI
+          gh release create "${{ github.event.inputs.version }}-windows" \
+            --title "TraceVibe ${{ github.event.inputs.version }} (Windows)" \
+            --notes-file release-notes.md \
+            release-assets/*
