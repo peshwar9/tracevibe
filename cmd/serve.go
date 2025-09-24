@@ -69,6 +69,7 @@ func startServer(port int, dbPath string) error {
 	http.HandleFunc("/", server.dashboardHandler)
 	http.HandleFunc("/projects/", server.projectHandler)
 	http.HandleFunc("/api/test/run", server.testRunHandler)
+	http.HandleFunc("/api/project/", server.projectAPIHandler)
 	http.HandleFunc("/api/", server.apiHandler)
 
 	addr := fmt.Sprintf(":%d", port)
@@ -152,6 +153,7 @@ func (s *Server) projectOverviewHandler(w http.ResponseWriter, r *http.Request, 
 		ScopeCount     int
 		UserStoryCount int
 		TechSpecCount  int
+		TotalTestCount int
 		Error          string
 	}{
 		Title: "Project Overview",
@@ -176,6 +178,10 @@ func (s *Server) projectOverviewHandler(w http.ResponseWriter, r *http.Request, 
 		data.Error = fmt.Sprintf("Error loading components: %v", err)
 	} else {
 		data.Components = components
+		// Calculate total test count from components
+		for _, comp := range components {
+			data.TotalTestCount += comp.TestCaseCount
+		}
 	}
 
 	// Get requirements tree
@@ -292,11 +298,115 @@ func (s *Server) testRunHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(result)
 }
 
+// Project API handler for delete operations
+func (s *Server) projectAPIHandler(w http.ResponseWriter, r *http.Request) {
+	path := r.URL.Path[len("/api/project/"):]
+	parts := splitPath(path)
+
+	if len(parts) == 2 && parts[1] == "delete" && r.Method == http.MethodDelete {
+		projectKey := parts[0]
+		s.deleteProjectHandler(w, r, projectKey)
+		return
+	}
+
+	http.Error(w, "Not found", http.StatusNotFound)
+}
+
+func (s *Server) deleteProjectHandler(w http.ResponseWriter, r *http.Request, projectKey string) {
+	// Get project ID first
+	project, err := s.db.GetProjectByKey(projectKey)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error finding project: %v", err), http.StatusInternalServerError)
+		return
+	}
+	if project == nil {
+		http.Error(w, "Project not found", http.StatusNotFound)
+		return
+	}
+
+	// Delete project and all related data (cascading delete)
+	err = s.deleteProject(project.ID)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error deleting project: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{
+		"status": "success",
+		"message": fmt.Sprintf("Project %s deleted successfully", projectKey),
+	})
+}
+
+func (s *Server) deleteProject(projectID string) error {
+	// Start transaction
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// Delete in correct order to respect foreign key constraints
+	// 1. Delete requirement_test_coverage
+	_, err = tx.Exec(`DELETE FROM requirement_test_coverage WHERE requirement_id IN
+		(SELECT id FROM requirements WHERE project_id = ?)`, projectID)
+	if err != nil {
+		return err
+	}
+
+	// 2. Delete test_cases
+	_, err = tx.Exec(`DELETE FROM test_cases WHERE test_file_id IN
+		(SELECT id FROM test_files WHERE project_id = ?)`, projectID)
+	if err != nil {
+		return err
+	}
+
+	// 3. Delete test_files
+	_, err = tx.Exec(`DELETE FROM test_files WHERE project_id = ?`, projectID)
+	if err != nil {
+		return err
+	}
+
+	// 4. Delete implementations
+	_, err = tx.Exec(`DELETE FROM implementations WHERE requirement_id IN
+		(SELECT id FROM requirements WHERE project_id = ?)`, projectID)
+	if err != nil {
+		return err
+	}
+
+	// 5. Delete requirements
+	_, err = tx.Exec(`DELETE FROM requirements WHERE project_id = ?`, projectID)
+	if err != nil {
+		return err
+	}
+
+	// 6. Delete system_components
+	_, err = tx.Exec(`DELETE FROM system_components WHERE project_id = ?`, projectID)
+	if err != nil {
+		return err
+	}
+
+	// 7. Delete project
+	_, err = tx.Exec(`DELETE FROM projects WHERE id = ?`, projectID)
+	if err != nil {
+		return err
+	}
+
+	// Commit transaction
+	return tx.Commit()
+}
+
 func (s *Server) runTestsForComponent(projectKey, componentKey string) (*TestResult, error) {
 	// Get test files for this component
 	testFiles, err := s.getTestFilesForComponent(projectKey, componentKey)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get test files: %w", err)
+		// Return a valid result with error message instead of error
+		return &TestResult{
+			Passed:   0,
+			Failed:   0,
+			Duration: "0s",
+			Output:   fmt.Sprintf("Error accessing test files: %v", err),
+		}, nil
 	}
 
 	if len(testFiles) == 0 {
@@ -304,7 +414,7 @@ func (s *Server) runTestsForComponent(projectKey, componentKey string) (*TestRes
 			Passed:   0,
 			Failed:   0,
 			Duration: "0s",
-			Output:   "No test files found for component: " + componentKey,
+			Output:   fmt.Sprintf("No test files found for component '%s' in project '%s'.\n\nTo add test files, include them in your RTM JSON with test_cases entries.", componentKey, projectKey),
 		}, nil
 	}
 
@@ -340,10 +450,13 @@ func (s *Server) runTestsForComponent(projectKey, componentKey string) (*TestRes
 
 func (s *Server) getTestFilesForComponent(projectKey, componentKey string) ([]string, error) {
 	query := `
-		SELECT tf.file_path
+		SELECT DISTINCT tf.file_path
 		FROM test_files tf
+		JOIN test_cases tc ON tf.id = tc.test_file_id
+		JOIN requirement_test_coverage rtc ON tc.id = rtc.test_case_id
+		JOIN requirements r ON rtc.requirement_id = r.id
+		JOIN system_components c ON r.component_id = c.id
 		JOIN projects p ON tf.project_id = p.id
-		JOIN system_components c ON tf.component_id = c.id
 		WHERE p.project_key = ? AND c.component_key = ?
 		ORDER BY tf.file_path`
 
@@ -449,18 +562,19 @@ type ProjectSummary struct {
 }
 
 type ComponentSummary struct {
-	ID               string `json:"id"`
-	ComponentKey     string `json:"component_key"`
-	Name             string `json:"name"`
-	ComponentType    string `json:"component_type"`
-	Technology       string `json:"technology"`
-	Description      string `json:"description"`
-	TotalRequirements int    `json:"total_requirements"`
-	ScopeCount       int    `json:"scope_count"`
-	UserStoryCount   int    `json:"user_story_count"`
-	TechSpecCount    int    `json:"tech_spec_count"`
-	ImplementationCount int `json:"implementation_count"`
-	TestCaseCount    int    `json:"test_case_count"`
+	ID               string   `json:"id"`
+	ComponentKey     string   `json:"component_key"`
+	Name             string   `json:"name"`
+	ComponentType    string   `json:"component_type"`
+	Technology       string   `json:"technology"`
+	Description      string   `json:"description"`
+	TotalRequirements int     `json:"total_requirements"`
+	ScopeCount       int      `json:"scope_count"`
+	UserStoryCount   int      `json:"user_story_count"`
+	TechSpecCount    int      `json:"tech_spec_count"`
+	ImplementationCount int   `json:"implementation_count"`
+	TestCaseCount    int      `json:"test_case_count"`
+	ScopeIDs         []string `json:"scope_ids"`
 }
 
 type RequirementTree struct {
@@ -475,6 +589,9 @@ type RequirementTree struct {
 	Children         []RequirementTree `json:"children"`
 	Implementation   []ImplementationInfo `json:"implementation"`
 	TestCases        []TestCaseInfo    `json:"test_cases"`
+	UserStoryCount   int               `json:"user_story_count"`
+	TechSpecCount    int               `json:"tech_spec_count"`
+	TestCaseCount    int               `json:"test_case_count"`
 }
 
 type ImplementationInfo struct {
@@ -596,8 +713,9 @@ func (s *Server) getComponentsSummary(projectKey string) ([]ComponentSummary, er
 	query := `
 		SELECT c.id, c.component_key, c.name, c.component_type,
 			   COALESCE(c.technology, '') as technology, COALESCE(c.description, '') as description,
-			   cs.total_requirements, cs.scope_count, cs.user_story_count, cs.tech_spec_count,
-			   cs.implementation_count, cs.test_case_count
+			   COALESCE(cs.total_requirements, 0), COALESCE(cs.scope_count, 0),
+			   COALESCE(cs.user_story_count, 0), COALESCE(cs.tech_spec_count, 0),
+			   COALESCE(cs.implementation_count, 0), COALESCE(cs.test_case_count, 0)
 		FROM system_components c
 		JOIN projects p ON c.project_id = p.id
 		LEFT JOIN component_summary cs ON c.id = cs.id
@@ -619,6 +737,25 @@ func (s *Server) getComponentsSummary(projectKey string) ([]ComponentSummary, er
 		if err != nil {
 			return nil, err
 		}
+
+		// Get scope IDs for this component
+		scopeQuery := `
+			SELECT r.requirement_key
+			FROM requirements r
+			WHERE r.component_id = ? AND UPPER(r.requirement_type) = 'SCOPE'
+			ORDER BY r.requirement_key`
+
+		scopeRows, err := s.db.Query(scopeQuery, c.ID)
+		if err == nil {
+			defer scopeRows.Close()
+			for scopeRows.Next() {
+				var scopeID string
+				if err := scopeRows.Scan(&scopeID); err == nil {
+					c.ScopeIDs = append(c.ScopeIDs, scopeID)
+				}
+			}
+		}
+
 		components = append(components, c)
 	}
 
@@ -691,11 +828,22 @@ func (s *Server) getRequirementsTree(projectKey, componentKey string) ([]Require
 		children, err := s.getChildRequirements(req.ID)
 		if err == nil {
 			req.Children = children
+			// Calculate counts from children
+			for _, child := range children {
+				switch strings.ToUpper(child.RequirementType) {
+				case "USER_STORY":
+					req.UserStoryCount++
+				case "TECH_SPEC":
+					req.TechSpecCount++
+				}
+				req.TestCaseCount += len(child.TestCases) + child.TestCaseCount
+			}
 		}
 
 		// Get implementation and test info
 		req.Implementation, _ = s.getImplementationInfo(req.ID)
 		req.TestCases, _ = s.getTestCaseInfo(req.ID)
+		req.TestCaseCount += len(req.TestCases)
 
 		requirements = append(requirements, req)
 	}
@@ -731,11 +879,22 @@ func (s *Server) getChildRequirements(parentID string) ([]RequirementTree, error
 		grandchildren, err := s.getChildRequirements(child.ID)
 		if err == nil {
 			child.Children = grandchildren
+			// Calculate counts from grandchildren
+			for _, grandchild := range grandchildren {
+				switch strings.ToUpper(grandchild.RequirementType) {
+				case "USER_STORY":
+					child.UserStoryCount++
+				case "TECH_SPEC":
+					child.TechSpecCount++
+				}
+				child.TestCaseCount += len(grandchild.TestCases) + grandchild.TestCaseCount
+			}
 		}
 
 		// Get implementation and test info
 		child.Implementation, _ = s.getImplementationInfo(child.ID)
 		child.TestCases, _ = s.getTestCaseInfo(child.ID)
+		child.TestCaseCount += len(child.TestCases)
 
 		children = append(children, child)
 	}
@@ -802,12 +961,12 @@ func (s *Server) getTestCaseInfo(requirementID string) ([]TestCaseInfo, error) {
 }
 
 func countRequirementsByType(req RequirementTree, scopeCount, userStoryCount, techSpecCount *int) {
-	switch req.RequirementType {
-	case "scope":
+	switch strings.ToUpper(req.RequirementType) {
+	case "SCOPE":
 		*scopeCount++
-	case "user_story":
+	case "USER_STORY":
 		*userStoryCount++
-	case "tech_spec":
+	case "TECH_SPEC":
 		*techSpecCount++
 	}
 

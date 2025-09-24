@@ -388,29 +388,44 @@ func (imp *Importer) importImplementation(tx database.Tx, requirementID string, 
 
 func (imp *Importer) importTestCoverage(tx database.Tx, projectID, requirementID string, tests *models.TestCoverage) error {
 	// Import backend tests
-	if err := imp.importTestFiles(tx, projectID, requirementID, "backend", tests.Backend); err != nil {
+	if err := imp.importTestFiles(tx, projectID, requirementID, "backend", "unit", tests.Backend); err != nil {
 		return err
 	}
 
 	// Import frontend tests
-	if err := imp.importTestFiles(tx, projectID, requirementID, "frontend", tests.Frontend); err != nil {
+	if err := imp.importTestFiles(tx, projectID, requirementID, "frontend", "unit", tests.Frontend); err != nil {
+		return err
+	}
+
+	// Import unit tests
+	if err := imp.importTestFiles(tx, projectID, requirementID, "backend", "unit", tests.UnitTests); err != nil {
+		return err
+	}
+
+	// Import integration tests
+	if err := imp.importTestFiles(tx, projectID, requirementID, "backend", "integration", tests.IntegrationTests); err != nil {
+		return err
+	}
+
+	// Import e2e tests
+	if err := imp.importTestFiles(tx, projectID, requirementID, "frontend", "e2e", tests.E2ETests); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (imp *Importer) importTestFiles(tx database.Tx, projectID, requirementID, layer string, testFiles []models.TestFile) error {
+func (imp *Importer) importTestFiles(tx database.Tx, projectID, requirementID, layer, testType string, testFiles []models.TestFile) error {
 	for _, testFile := range testFiles {
 		// Ensure test file exists in test_files table
-		testFileID, err := imp.ensureTestFile(tx, projectID, testFile.File, layer)
+		testFileID, err := imp.ensureTestFile(tx, projectID, testFile.File, layer, testType)
 		if err != nil {
 			return err
 		}
 
 		// Import individual test functions
 		for _, testFunc := range testFile.Functions {
-			testCaseID, err := imp.ensureTestCase(tx, testFileID, testFunc)
+			testCaseID, err := imp.ensureTestCase(tx, testFileID, testFunc, testType)
 			if err != nil {
 				return err
 			}
@@ -428,7 +443,7 @@ func (imp *Importer) importTestFiles(tx database.Tx, projectID, requirementID, l
 	return nil
 }
 
-func (imp *Importer) ensureTestFile(tx database.Tx, projectID, filePath, layer string) (string, error) {
+func (imp *Importer) ensureTestFile(tx database.Tx, projectID, filePath, layer, testType string) (string, error) {
 	var testFileID string
 	err := tx.QueryRow("SELECT id FROM test_files WHERE project_id = ? AND file_path = ?",
 		projectID, filePath).Scan(&testFileID)
@@ -436,7 +451,7 @@ func (imp *Importer) ensureTestFile(tx database.Tx, projectID, filePath, layer s
 	if err != nil {
 		// Insert new test file
 		query := `INSERT INTO test_files (project_id, file_path, test_type, layer, framework)
-				  VALUES (?, ?, 'unit', ?, ?)
+				  VALUES (?, ?, ?, ?, ?)
 				  RETURNING id`
 
 		framework := "Go testing"
@@ -444,7 +459,7 @@ func (imp *Importer) ensureTestFile(tx database.Tx, projectID, filePath, layer s
 			framework = "Jest"
 		}
 
-		err := tx.QueryRow(query, projectID, filePath, layer, framework).Scan(&testFileID)
+		err := tx.QueryRow(query, projectID, filePath, testType, layer, framework).Scan(&testFileID)
 		if err != nil {
 			return "", err
 		}
@@ -454,7 +469,7 @@ func (imp *Importer) ensureTestFile(tx database.Tx, projectID, filePath, layer s
 	return testFileID, nil
 }
 
-func (imp *Importer) ensureTestCase(tx database.Tx, testFileID, testName string) (string, error) {
+func (imp *Importer) ensureTestCase(tx database.Tx, testFileID, testName, testType string) (string, error) {
 	var testCaseID string
 	err := tx.QueryRow("SELECT id FROM test_cases WHERE test_file_id = ? AND test_name = ?",
 		testFileID, testName).Scan(&testCaseID)
@@ -462,10 +477,10 @@ func (imp *Importer) ensureTestCase(tx database.Tx, testFileID, testName string)
 	if err != nil {
 		// Insert new test case
 		query := `INSERT INTO test_cases (test_file_id, test_name, test_type)
-				  VALUES (?, ?, 'unit')
+				  VALUES (?, ?, ?)
 				  RETURNING id`
 
-		err := tx.QueryRow(query, testFileID, testName).Scan(&testCaseID)
+		err := tx.QueryRow(query, testFileID, testName, testType).Scan(&testCaseID)
 		if err != nil {
 			return "", err
 		}

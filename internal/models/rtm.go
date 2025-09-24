@@ -89,8 +89,11 @@ type APICall struct {
 }
 
 type TestCoverage struct {
-	Backend  []TestFile `json:"backend,omitempty" yaml:"backend,omitempty"`
-	Frontend []TestFile `json:"frontend,omitempty" yaml:"frontend,omitempty"`
+	Backend          []TestFile `json:"backend,omitempty" yaml:"backend,omitempty"`
+	Frontend         []TestFile `json:"frontend,omitempty" yaml:"frontend,omitempty"`
+	UnitTests        []TestFile `json:"unit_tests,omitempty" yaml:"unit_tests,omitempty"`
+	IntegrationTests []TestFile `json:"integration_tests,omitempty" yaml:"integration_tests,omitempty"`
+	E2ETests         []TestFile `json:"e2e_tests,omitempty" yaml:"e2e_tests,omitempty"`
 }
 
 type TestFile struct {
