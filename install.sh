@@ -55,38 +55,61 @@ detect_platform() {
 # Download binary from GitHub releases
 download_binary() {
     local platform=$1
-    local temp_file="/tmp/tracevibe-$$"
+    local temp_dir="/tmp/tracevibe-$$"
+    local temp_file=""
 
     echo -e "${YELLOW}Downloading TraceVibe for $platform...${NC}"
 
-    # Get latest release URL
-    if [ "$VERSION" = "latest" ]; then
-        DOWNLOAD_URL="https://github.com/$REPO/releases/latest/download/tracevibe-$platform"
-    else
-        DOWNLOAD_URL="https://github.com/$REPO/releases/download/$VERSION/tracevibe-$platform"
-    fi
+    # Create temp directory
+    mkdir -p "$temp_dir"
 
-    # Add .exe extension for Windows
+    # Get latest release URL - tar.gz for Unix, zip for Windows
     if [[ "$platform" == *"windows"* ]]; then
-        DOWNLOAD_URL="${DOWNLOAD_URL}.exe"
-        temp_file="${temp_file}.exe"
+        if [ "$VERSION" = "latest" ]; then
+            DOWNLOAD_URL="https://github.com/$REPO/releases/latest/download/tracevibe-$platform.zip"
+        else
+            DOWNLOAD_URL="https://github.com/$REPO/releases/download/$VERSION/tracevibe-$platform.zip"
+        fi
+        ARCHIVE_FILE="$temp_dir/tracevibe.zip"
+    else
+        if [ "$VERSION" = "latest" ]; then
+            DOWNLOAD_URL="https://github.com/$REPO/releases/latest/download/tracevibe-$platform.tar.gz"
+        else
+            DOWNLOAD_URL="https://github.com/$REPO/releases/download/$VERSION/tracevibe-$platform.tar.gz"
+        fi
+        ARCHIVE_FILE="$temp_dir/tracevibe.tar.gz"
     fi
 
-    # Download the binary
+    # Download the archive
     if command -v curl &> /dev/null; then
-        curl -fsSL "$DOWNLOAD_URL" -o "$temp_file" || {
+        curl -fsSL "$DOWNLOAD_URL" -o "$ARCHIVE_FILE" || {
             echo -e "${RED}Failed to download TraceVibe${NC}"
             echo "URL attempted: $DOWNLOAD_URL"
             exit 1
         }
     elif command -v wget &> /dev/null; then
-        wget -q "$DOWNLOAD_URL" -O "$temp_file" || {
+        wget -q "$DOWNLOAD_URL" -O "$ARCHIVE_FILE" || {
             echo -e "${RED}Failed to download TraceVibe${NC}"
             echo "URL attempted: $DOWNLOAD_URL"
             exit 1
         }
     else
         echo -e "${RED}Neither curl nor wget found. Please install one of them.${NC}"
+        exit 1
+    fi
+
+    # Extract the archive
+    if [[ "$platform" == *"windows"* ]]; then
+        unzip -q "$ARCHIVE_FILE" -d "$temp_dir"
+        temp_file=$(find "$temp_dir" -name "*.exe" -type f | head -1)
+    else
+        tar -xzf "$ARCHIVE_FILE" -C "$temp_dir"
+        # Binary should be named tracevibe-<platform>
+        temp_file="$temp_dir/tracevibe-$platform"
+    fi
+
+    if [ -z "$temp_file" ]; then
+        echo -e "${RED}Failed to find binary in archive${NC}"
         exit 1
     fi
 
