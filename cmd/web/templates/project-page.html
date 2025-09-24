@@ -35,7 +35,67 @@
         .tree-item { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem; border-radius: 4px; transition: background-color 0.2s; }
         .tree-item:hover { background-color: #f1f5f9; }
         .tree-toggle { width: 1rem; height: 1rem; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 0.75rem; color: #6b7280; }
+
+        /* Accordion styles */
+        .accordion { border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }
+        .accordion-item { border-bottom: 1px solid #e2e8f0; }
+        .accordion-item:last-child { border-bottom: none; }
+        .accordion-header {
+            background: #f8fafc;
+            padding: 1rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            transition: background-color 0.2s;
+            user-select: none;
+        }
+        .accordion-header:hover { background: #f1f5f9; }
+        .accordion-header.active { background: #e0f2fe; }
+        .accordion-toggle {
+            width: 1.25rem;
+            height: 1.25rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            background: #ffffff;
+            border: 1px solid #d1d5db;
+            font-size: 0.875rem;
+            transition: all 0.2s;
+        }
+        .accordion-toggle.active { background: #3b82f6; color: white; }
+        .accordion-content {
+            display: none;
+            padding: 0;
+            background: white;
+        }
+        .accordion-content.active { display: block; }
+        .accordion-nested { padding-left: 2rem; border-left: 2px solid #e2e8f0; }
+
+        /* Requirement type styling */
+        .req-scope { border-left: 4px solid #8b5cf6; }
+        .req-story { border-left: 4px solid #10b981; }
+        .req-tech { border-left: 4px solid #f59e0b; }
+
+        .req-meta {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+            margin-top: 0.25rem;
+            font-size: 0.75rem;
+            color: #6b7280;
+        }
+        .req-id { background: #f3f4f6; padding: 0.125rem 0.375rem; border-radius: 3px; font-family: monospace; }
+        .req-impl { margin-top: 0.5rem; font-size: 0.75rem; color: #6b7280; }
+        .impl-file { background: #f8fafc; padding: 0.25rem 0.5rem; border-radius: 3px; margin: 0.125rem 0; font-family: monospace; }
         .error { background-color: #fef2f2; border: 1px solid #fecaca; color: #dc2626; padding: 1rem; border-radius: 6px; margin-bottom: 1rem; }
+        .test-results { margin-top: 2rem; display: none; }
+        .test-output { background: #1e293b; color: #e2e8f0; padding: 1rem; border-radius: 6px; font-family: 'Monaco', 'Menlo', monospace; font-size: 0.875rem; line-height: 1.5; }
+        .test-summary { margin-bottom: 1rem; }
+        .test-passed { color: #10b981; }
+        .test-failed { color: #ef4444; }
+        .run-tests-btn:hover { background: #3b82f6 !important; color: white !important; }
     </style>
 </head>
 <body>
@@ -100,6 +160,11 @@
                             </div>
                             <div style="margin-left: 2rem; margin-top: 0.5rem; font-size: 0.875rem; color: #6b7280;">
                                 {{.TotalRequirements}} requirements • {{.TestCaseCount}} tests
+                                <button class="run-tests-btn" data-project="{{$.Project.ProjectKey}}" data-component="{{.ComponentKey}}"
+                                        style="margin-left: 1rem; padding: 0.25rem 0.5rem; border: 1px solid #3b82f6; background: white;
+                                               color: #3b82f6; border-radius: 4px; font-size: 0.75rem; cursor: pointer;">
+                                    🧪 Run Tests
+                                </button>
                             </div>
                         </li>
                         {{end}}
@@ -110,31 +175,100 @@
                 </div>
             </div>
 
-            <!-- Requirements Tree -->
+            <!-- Requirements Accordion -->
             <div class="card">
                 <div class="card-header">
                     <h2 class="card-title">Requirements Hierarchy</h2>
+                    <span style="font-size: 0.875rem; color: #6b7280;">Click on scopes to expand user stories and tech specs</span>
                 </div>
                 <div class="card-content">
                     {{if .Requirements}}
-                    <ul class="tree">
+                    <div class="accordion">
                         {{range .Requirements}}
-                        <li>
-                            <div class="tree-item">
-                                <span class="tree-toggle">{{if .Children}}▼{{else}}📄{{end}}</span>
+                        {{if eq .RequirementType "SCOPE"}}
+                        <div class="accordion-item req-scope">
+                            <div class="accordion-header" onclick="toggleAccordion(this)">
+                                <div class="accordion-toggle">+</div>
                                 <div style="flex: 1;">
-                                    <strong>{{.Title}}</strong>
-                                    <div style="font-size: 0.75rem; color: #6b7280;">
-                                        {{.RequirementKey}} • {{.RequirementType}} • {{.Category}}
+                                    <div style="font-weight: 600; font-size: 1rem;">{{.Title}}</div>
+                                    <div class="req-meta">
+                                        <span class="req-id">{{.RequirementKey}}</span>
+                                        <span class="badge {{if eq .Status "IMPLEMENTED"}}badge-success{{else if eq .Status "IN_PROGRESS"}}badge-warning{{else}}badge-info{{end}}">{{.Status}}</span>
                                     </div>
+                                    {{if .Description}}
+                                    <div style="margin-top: 0.5rem; font-size: 0.875rem; color: #4b5563;">{{.Description}}</div>
+                                    {{end}}
                                 </div>
-                                <span class="badge {{if eq .Status "completed"}}badge-success{{else if eq .Status "in_progress"}}badge-warning{{else}}badge-info{{end}}">
-                                    {{.Status}}
-                                </span>
                             </div>
-                        </li>
+                            <div class="accordion-content">
+                                {{if .Children}}
+                                <div style="padding: 1rem;">
+                                    {{range .Children}}
+                                    {{if eq .RequirementType "USER_STORY"}}
+                                    <div class="accordion-item req-story" style="margin-bottom: 0.5rem; border: 1px solid #e2e8f0; border-radius: 6px;">
+                                        <div class="accordion-header" onclick="toggleAccordion(this)">
+                                            <div class="accordion-toggle">+</div>
+                                            <div style="flex: 1;">
+                                                <div style="font-weight: 500;">{{.Title}}</div>
+                                                <div class="req-meta">
+                                                    <span class="req-id">{{.RequirementKey}}</span>
+                                                    <span class="badge {{if eq .Status "IMPLEMENTED"}}badge-success{{else if eq .Status "IN_PROGRESS"}}badge-warning{{else}}badge-info{{end}}">{{.Status}}</span>
+                                                </div>
+                                                {{if .Description}}
+                                                <div style="margin-top: 0.25rem; font-size: 0.8rem; color: #6b7280;">{{.Description}}</div>
+                                                {{end}}
+                                            </div>
+                                        </div>
+                                        <div class="accordion-content">
+                                            {{if .Children}}
+                                            <div style="padding: 0.75rem;">
+                                                {{range .Children}}
+                                                {{if eq .RequirementType "TECH_SPEC"}}
+                                                <div class="req-tech" style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 4px; padding: 0.75rem; margin-bottom: 0.5rem;">
+                                                    <div style="font-weight: 500; font-size: 0.9rem;">{{.Title}}</div>
+                                                    <div class="req-meta">
+                                                        <span class="req-id">{{.RequirementKey}}</span>
+                                                        <span class="badge {{if eq .Status "IMPLEMENTED"}}badge-success{{else if eq .Status "IN_PROGRESS"}}badge-warning{{else}}badge-info{{end}}">{{.Status}}</span>
+                                                    </div>
+                                                    {{if .Description}}
+                                                    <div style="margin-top: 0.25rem; font-size: 0.8rem; color: #6b7280;">{{.Description}}</div>
+                                                    {{end}}
+                                                    {{if .Implementation}}
+                                                    <div class="req-impl">
+                                                        <strong>Implementation:</strong>
+                                                        {{range .Implementation}}
+                                                        <div class="impl-file">📁 {{.FilePath}}{{if .Functions}} → {{range $i, $f := .Functions}}{{if $i}}, {{end}}{{$f}}{{end}}{{end}}</div>
+                                                        {{end}}
+                                                    </div>
+                                                    {{end}}
+                                                    {{if .TestCases}}
+                                                    <div class="req-impl">
+                                                        <strong>Tests:</strong>
+                                                        {{range .TestCases}}
+                                                        <div class="impl-file">🧪 {{.FilePath}} → {{.TestName}}</div>
+                                                        {{end}}
+                                                    </div>
+                                                    {{end}}
+                                                </div>
+                                                {{end}}
+                                                {{end}}
+                                            </div>
+                                            {{else}}
+                                            <div style="padding: 0.75rem; color: #6b7280; font-style: italic;">No tech specs defined</div>
+                                            {{end}}
+                                        </div>
+                                    </div>
+                                    {{end}}
+                                    {{end}}
+                                </div>
+                                {{else}}
+                                <div style="padding: 1rem; color: #6b7280; font-style: italic;">No user stories defined</div>
+                                {{end}}
+                            </div>
+                        </div>
                         {{end}}
-                    </ul>
+                        {{end}}
+                    </div>
                     {{else}}
                     <p style="color: #6b7280; text-align: center; padding: 2rem;">No requirements found.</p>
                     {{end}}
@@ -173,10 +307,43 @@
                 </dl>
             </div>
         </div>
+
+        <!-- Test Results Section -->
+        <div id="testResults" class="test-results">
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">Test Results</h2>
+                    <span id="testStatus" style="font-size: 0.875rem; color: #6b7280;">Ready</span>
+                </div>
+                <div class="card-content">
+                    <div id="testSummary" class="test-summary"></div>
+                    <div id="testOutput" class="test-output"></div>
+                </div>
+            </div>
+        </div>
     </main>
 
     <script>
-        // Toggle tree items
+        // Toggle accordion items
+        function toggleAccordion(header) {
+            const content = header.nextElementSibling;
+            const toggle = header.querySelector('.accordion-toggle');
+            const isActive = content.classList.contains('active');
+
+            if (isActive) {
+                content.classList.remove('active');
+                header.classList.remove('active');
+                toggle.classList.remove('active');
+                toggle.textContent = '+';
+            } else {
+                content.classList.add('active');
+                header.classList.add('active');
+                toggle.classList.add('active');
+                toggle.textContent = '−';
+            }
+        }
+
+        // Toggle tree items (for components)
         document.addEventListener('click', function(e) {
             if (e.target.classList.contains('tree-toggle')) {
                 const treeItem = e.target.closest('li');
@@ -187,6 +354,80 @@
                 }
             }
         });
+
+        // Handle run tests button clicks
+        document.addEventListener('click', function(e) {
+            if (e.target.classList.contains('run-tests-btn')) {
+                const project = e.target.dataset.project;
+                const component = e.target.dataset.component;
+                runTests(project, component, e.target);
+            }
+        });
+
+        async function runTests(project, component, button) {
+            const testResults = document.getElementById('testResults');
+            const testStatus = document.getElementById('testStatus');
+            const testSummary = document.getElementById('testSummary');
+            const testOutput = document.getElementById('testOutput');
+
+            // Show test results section
+            testResults.style.display = 'block';
+            testResults.scrollIntoView({ behavior: 'smooth' });
+
+            // Update button state
+            button.disabled = true;
+            button.textContent = '⏳ Running...';
+            testStatus.textContent = 'Running tests...';
+            testOutput.textContent = 'Starting test execution...\n';
+
+            try {
+                const response = await fetch(`/api/test/run`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        project: project,
+                        component: component
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const result = await response.json();
+
+                // Update test summary
+                const passed = result.passed || 0;
+                const failed = result.failed || 0;
+                const total = passed + failed;
+
+                testSummary.innerHTML = `
+                    <div style="display: flex; gap: 1rem; align-items: center;">
+                        <span>Total: ${total}</span>
+                        <span class="test-passed">✓ Passed: ${passed}</span>
+                        ${failed > 0 ? `<span class="test-failed">✗ Failed: ${failed}</span>` : ''}
+                        <span>Duration: ${result.duration || 'N/A'}</span>
+                    </div>
+                `;
+
+                // Update test output
+                testOutput.textContent = result.output || 'Test execution completed.';
+                testStatus.textContent = failed > 0 ? 'Tests failed' : 'All tests passed';
+                testStatus.className = failed > 0 ? 'test-failed' : 'test-passed';
+
+            } catch (error) {
+                testSummary.innerHTML = '<span class="test-failed">Error running tests</span>';
+                testOutput.textContent = `Error: ${error.message}`;
+                testStatus.textContent = 'Error occurred';
+                testStatus.className = 'test-failed';
+            } finally {
+                // Reset button state
+                button.disabled = false;
+                button.textContent = '🧪 Run Tests';
+            }
+        }
     </script>
 </body>
 </html>

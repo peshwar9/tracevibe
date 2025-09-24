@@ -9,7 +9,8 @@ type RTMData struct {
 	Metadata         RTMMetadata        `json:"metadata" yaml:"metadata"`
 	Project          Project            `json:"project" yaml:"project"`
 	SystemComponents []SystemComponent  `json:"components" yaml:"components"`
-	Requirements     []Requirement      `json:"requirements" yaml:"requirements"`
+	Requirements     []Requirement      `json:"requirements,omitempty" yaml:"requirements,omitempty"`
+	Scopes           []Scope            `json:"scopes,omitempty" yaml:"scopes,omitempty"`
 	APIEndpoints     []APIEndpoint      `json:"api_endpoints,omitempty" yaml:"api_endpoints,omitempty"`
 }
 
@@ -136,4 +137,35 @@ func UnmarshalStringSliceJSON(data string) ([]string, error) {
 	var slice []string
 	err := json.Unmarshal([]byte(data), &slice)
 	return slice, err
+}
+
+// Nested structures for scopes -> user stories -> tech specs format
+type Scope struct {
+	ID           string      `json:"id" yaml:"id"`
+	ComponentID  string      `json:"component_id" yaml:"component_id"`
+	Name         string      `json:"name" yaml:"name"`
+	Description  string      `json:"description,omitempty" yaml:"description,omitempty"`
+	Priority     string      `json:"priority,omitempty" yaml:"priority,omitempty"`
+	Status       string      `json:"status,omitempty" yaml:"status,omitempty"`
+	UserStories  []UserStory `json:"user_stories" yaml:"user_stories"`
+}
+
+type UserStory struct {
+	ID          string     `json:"id" yaml:"id"`
+	Name        string     `json:"name" yaml:"name"`
+	Description string     `json:"description,omitempty" yaml:"description,omitempty"`
+	Priority    string     `json:"priority,omitempty" yaml:"priority,omitempty"`
+	Status      string     `json:"status,omitempty" yaml:"status,omitempty"`
+	TechSpecs   []TechSpec `json:"tech_specs" yaml:"tech_specs"`
+}
+
+type TechSpec struct {
+	ID               string          `json:"id" yaml:"id"`
+	Name             string          `json:"name" yaml:"name"`
+	Description      string          `json:"description,omitempty" yaml:"description,omitempty"`
+	Priority         string          `json:"priority,omitempty" yaml:"priority,omitempty"`
+	Status           string          `json:"status,omitempty" yaml:"status,omitempty"`
+	AcceptanceCriteria []string      `json:"acceptance_criteria,omitempty" yaml:"acceptance_criteria,omitempty"`
+	Implementation   *Implementation `json:"implementation,omitempty" yaml:"implementation,omitempty"`
+	TestCoverage     *TestCoverage   `json:"test_coverage,omitempty" yaml:"test_coverage,omitempty"`
 }

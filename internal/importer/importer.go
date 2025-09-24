@@ -101,10 +101,17 @@ func (imp *Importer) importRTMData(rtmData *models.RTMData, overwrite bool) erro
 		componentMap[component.ID] = componentID
 	}
 
-	// Import requirements hierarchically
+	// Import requirements hierarchically (legacy flat format)
 	for _, req := range rtmData.Requirements {
 		if err := imp.importRequirement(tx, projectID, componentMap[req.ComponentID], &req, "", overwrite); err != nil {
 			return fmt.Errorf("failed to import requirement %s: %w", req.ID, err)
+		}
+	}
+
+	// Import scopes hierarchically (new nested format)
+	for _, scope := range rtmData.Scopes {
+		if err := imp.importScope(tx, projectID, componentMap[scope.ComponentID], &scope, overwrite); err != nil {
+			return fmt.Errorf("failed to import scope %s: %w", scope.ID, err)
 		}
 	}
 
@@ -476,5 +483,104 @@ func (imp *Importer) importAPIEndpoint(tx database.Tx, projectID string, endpoin
 		endpoint.Handler, endpoint.Handler, endpoint.Description)
 
 	return err
+}
+
+// importScope converts nested scopes structure to flat requirements format
+func (imp *Importer) importScope(tx database.Tx, projectID, componentID string, scope *models.Scope, overwrite bool) error {
+	// Convert scope to requirement (SCOPE type)
+	scopeReq := models.Requirement{
+		ID:              scope.ID,
+		ComponentID:     scope.ComponentID,
+		RequirementType: "SCOPE",
+		Title:           scope.Name,
+		Description:     scope.Description,
+		Category:        "scope",
+		Priority:        scope.Priority,
+		Status:          scope.Status,
+	}
+
+	// Import the scope as a requirement
+	if err := imp.importRequirement(tx, projectID, componentID, &scopeReq, "", overwrite); err != nil {
+		return fmt.Errorf("failed to import scope requirement: %w", err)
+	}
+
+	// Get the scope requirement ID for parent reference
+	var scopeReqID string
+	err := tx.QueryRow("SELECT id FROM requirements WHERE project_id = ? AND requirement_key = ?",
+		projectID, scope.ID).Scan(&scopeReqID)
+	if err != nil {
+		return fmt.Errorf("failed to get scope requirement ID: %w", err)
+	}
+
+	// Import user stories under this scope
+	for _, userStory := range scope.UserStories {
+		if err := imp.importUserStory(tx, projectID, componentID, &userStory, scopeReqID, overwrite); err != nil {
+			return fmt.Errorf("failed to import user story %s: %w", userStory.ID, err)
+		}
+	}
+
+	return nil
+}
+
+// importUserStory converts user story to requirement format
+func (imp *Importer) importUserStory(tx database.Tx, projectID, componentID string, userStory *models.UserStory, parentID string, overwrite bool) error {
+	// Convert user story to requirement (USER_STORY type)
+	userStoryReq := models.Requirement{
+		ID:              userStory.ID,
+		ComponentID:     "", // Will be set to componentID parameter
+		RequirementType: "USER_STORY",
+		Title:           userStory.Name,
+		Description:     userStory.Description,
+		Category:        "user_story",
+		Priority:        userStory.Priority,
+		Status:          userStory.Status,
+	}
+
+	// Import the user story as a requirement
+	if err := imp.importRequirement(tx, projectID, componentID, &userStoryReq, parentID, overwrite); err != nil {
+		return fmt.Errorf("failed to import user story requirement: %w", err)
+	}
+
+	// Get the user story requirement ID for parent reference
+	var userStoryReqID string
+	err := tx.QueryRow("SELECT id FROM requirements WHERE project_id = ? AND requirement_key = ?",
+		projectID, userStory.ID).Scan(&userStoryReqID)
+	if err != nil {
+		return fmt.Errorf("failed to get user story requirement ID: %w", err)
+	}
+
+	// Import tech specs under this user story
+	for _, techSpec := range userStory.TechSpecs {
+		if err := imp.importTechSpec(tx, projectID, componentID, &techSpec, userStoryReqID, overwrite); err != nil {
+			return fmt.Errorf("failed to import tech spec %s: %w", techSpec.ID, err)
+		}
+	}
+
+	return nil
+}
+
+// importTechSpec converts tech spec to requirement format
+func (imp *Importer) importTechSpec(tx database.Tx, projectID, componentID string, techSpec *models.TechSpec, parentID string, overwrite bool) error {
+	// Convert tech spec to requirement (TECH_SPEC type)
+	techSpecReq := models.Requirement{
+		ID:                 techSpec.ID,
+		ComponentID:        "", // Will be set to componentID parameter
+		RequirementType:    "TECH_SPEC",
+		Title:              techSpec.Name,
+		Description:        techSpec.Description,
+		Category:           "tech_spec",
+		Priority:           techSpec.Priority,
+		Status:             techSpec.Status,
+		AcceptanceCriteria: techSpec.AcceptanceCriteria,
+		Implementation:     techSpec.Implementation,
+		Tests:              techSpec.TestCoverage,
+	}
+
+	// Import the tech spec as a requirement
+	if err := imp.importRequirement(tx, projectID, componentID, &techSpecReq, parentID, overwrite); err != nil {
+		return fmt.Errorf("failed to import tech spec requirement: %w", err)
+	}
+
+	return nil
 }
 

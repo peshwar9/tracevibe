@@ -7,6 +7,9 @@ import (
 	"html/template"
 	"net/http"
 	"os"
+	"os/exec"
+	"strings"
+	"time"
 
 	"github.com/peshwar9/tracevibe/internal/database"
 	"github.com/spf13/cobra"
@@ -65,6 +68,7 @@ func startServer(port int, dbPath string) error {
 	// Routes
 	http.HandleFunc("/", server.dashboardHandler)
 	http.HandleFunc("/projects/", server.projectHandler)
+	http.HandleFunc("/api/test/run", server.testRunHandler)
 	http.HandleFunc("/api/", server.apiHandler)
 
 	addr := fmt.Sprintf(":%d", port)
@@ -260,6 +264,139 @@ func (s *Server) apiHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
+// Test runner handler
+func (s *Server) testRunHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+
+	var req struct {
+		Project   string `json:"project"`
+		Component string `json:"component"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	result, err := s.runTestsForComponent(req.Project, req.Component)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(result)
+}
+
+func (s *Server) runTestsForComponent(projectKey, componentKey string) (*TestResult, error) {
+	// Get test files for this component
+	testFiles, err := s.getTestFilesForComponent(projectKey, componentKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get test files: %w", err)
+	}
+
+	if len(testFiles) == 0 {
+		return &TestResult{
+			Passed:   0,
+			Failed:   0,
+			Duration: "0s",
+			Output:   "No test files found for component: " + componentKey,
+		}, nil
+	}
+
+	// Run tests and collect results
+	startTime := time.Now()
+	var outputs []string
+	passed := 0
+	failed := 0
+
+	for _, testFile := range testFiles {
+		success, output, err := s.runTestFile(testFile)
+		outputs = append(outputs, fmt.Sprintf("Running tests in %s:\n%s", testFile, output))
+
+		if err != nil {
+			failed++
+			outputs = append(outputs, fmt.Sprintf("ERROR: %v", err))
+		} else if success {
+			passed++
+		} else {
+			failed++
+		}
+	}
+
+	duration := time.Since(startTime)
+
+	return &TestResult{
+		Passed:   passed,
+		Failed:   failed,
+		Duration: duration.Round(time.Millisecond).String(),
+		Output:   strings.Join(outputs, "\n\n"),
+	}, nil
+}
+
+func (s *Server) getTestFilesForComponent(projectKey, componentKey string) ([]string, error) {
+	query := `
+		SELECT tf.file_path
+		FROM test_files tf
+		JOIN projects p ON tf.project_id = p.id
+		JOIN system_components c ON tf.component_id = c.id
+		WHERE p.project_key = ? AND c.component_key = ?
+		ORDER BY tf.file_path`
+
+	rows, err := s.db.Query(query, projectKey, componentKey)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var testFiles []string
+	for rows.Next() {
+		var filePath string
+		if err := rows.Scan(&filePath); err != nil {
+			continue
+		}
+		testFiles = append(testFiles, filePath)
+	}
+
+	return testFiles, nil
+}
+
+func (s *Server) runTestFile(testFile string) (bool, string, error) {
+	// Determine test runner based on file extension
+	var cmd *exec.Cmd
+
+	switch {
+	case strings.HasSuffix(testFile, "_test.go"):
+		cmd = exec.Command("go", "test", "-v", testFile)
+	case strings.HasSuffix(testFile, ".test.js") || strings.HasSuffix(testFile, ".spec.js"):
+		cmd = exec.Command("npm", "test", testFile)
+	case strings.HasSuffix(testFile, ".test.py") || strings.HasSuffix(testFile, "_test.py"):
+		cmd = exec.Command("python", "-m", "pytest", "-v", testFile)
+	case strings.HasSuffix(testFile, ".test.rs"):
+		cmd = exec.Command("cargo", "test", "--test", strings.TrimSuffix(testFile, ".rs"))
+	default:
+		return false, "", fmt.Errorf("unsupported test file format: %s", testFile)
+	}
+
+	output, err := cmd.CombinedOutput()
+	outputStr := string(output)
+
+	if err != nil {
+		// Check if it's a test failure vs execution error
+		if strings.Contains(strings.ToLower(outputStr), "failed") ||
+		   strings.Contains(strings.ToLower(outputStr), "error") {
+			return false, outputStr, nil // Test ran but failed
+		}
+		return false, outputStr, err // Execution error
+	}
+
+	return true, outputStr, nil
+}
+
 // Helper methods
 
 func (s *Server) renderTemplate(w http.ResponseWriter, templateName string, data interface{}) {
@@ -295,14 +432,20 @@ func splitPath(path string) []string {
 // Data structures for templates
 
 type ProjectSummary struct {
-	ID               string `json:"id"`
-	ProjectKey       string `json:"project_key"`
-	Name             string `json:"name"`
-	Description      string `json:"description"`
-	Status           string `json:"status"`
-	ComponentCount   int    `json:"component_count"`
-	RequirementCount int    `json:"requirement_count"`
-	TestCaseCount    int    `json:"test_case_count"`
+	ID                    string `json:"id"`
+	ProjectKey            string `json:"project_key"`
+	Name                  string `json:"name"`
+	Description           string `json:"description"`
+	Status                string `json:"status"`
+	ComponentCount        int    `json:"component_count"`
+	RequirementCount      int    `json:"requirement_count"`
+	ScopeCount            int    `json:"scope_count"`
+	UserStoryCount        int    `json:"user_story_count"`
+	TechSpecCount         int    `json:"tech_spec_count"`
+	TestCaseCount         int    `json:"test_case_count"`
+	UnitTestCount         int    `json:"unit_test_count"`
+	IntegrationTestCount  int    `json:"integration_test_count"`
+	E2ETestCount          int    `json:"e2e_test_count"`
 }
 
 type ComponentSummary struct {
@@ -346,6 +489,13 @@ type TestCaseInfo struct {
 	TestType string `json:"test_type"`
 }
 
+type TestResult struct {
+	Passed   int    `json:"passed"`
+	Failed   int    `json:"failed"`
+	Duration string `json:"duration"`
+	Output   string `json:"output"`
+}
+
 // Database query methods (these would need to be implemented in the database package)
 
 func (s *Server) getProjectsSummary() ([]ProjectSummary, error) {
@@ -354,7 +504,13 @@ func (s *Server) getProjectsSummary() ([]ProjectSummary, error) {
 			p.id, p.project_key, p.name, COALESCE(p.description, '') as description, p.status,
 			COALESCE(comp_counts.component_count, 0) as component_count,
 			COALESCE(req_counts.requirement_count, 0) as requirement_count,
-			COALESCE(test_counts.test_count, 0) as test_count
+			COALESCE(scope_counts.scope_count, 0) as scope_count,
+			COALESCE(story_counts.story_count, 0) as story_count,
+			COALESCE(tech_counts.tech_count, 0) as tech_count,
+			COALESCE(test_counts.test_count, 0) as test_count,
+			COALESCE(unit_test_counts.unit_count, 0) as unit_count,
+			COALESCE(integration_test_counts.integration_count, 0) as integration_count,
+			COALESCE(e2e_test_counts.e2e_count, 0) as e2e_count
 		FROM projects p
 		LEFT JOIN (
 			SELECT project_id, COUNT(*) as component_count
@@ -365,12 +521,54 @@ func (s *Server) getProjectsSummary() ([]ProjectSummary, error) {
 			FROM requirements GROUP BY project_id
 		) req_counts ON p.id = req_counts.project_id
 		LEFT JOIN (
+			SELECT project_id, COUNT(*) as scope_count
+			FROM requirements
+			WHERE requirement_type = 'SCOPE'
+			GROUP BY project_id
+		) scope_counts ON p.id = scope_counts.project_id
+		LEFT JOIN (
+			SELECT project_id, COUNT(*) as story_count
+			FROM requirements
+			WHERE requirement_type = 'USER_STORY'
+			GROUP BY project_id
+		) story_counts ON p.id = story_counts.project_id
+		LEFT JOIN (
+			SELECT project_id, COUNT(*) as tech_count
+			FROM requirements
+			WHERE requirement_type = 'TECH_SPEC'
+			GROUP BY project_id
+		) tech_counts ON p.id = tech_counts.project_id
+		LEFT JOIN (
 			SELECT p.id as project_id, COUNT(DISTINCT tc.id) as test_count
 			FROM projects p
 			LEFT JOIN test_files tf ON p.id = tf.project_id
 			LEFT JOIN test_cases tc ON tf.id = tc.test_file_id
 			GROUP BY p.id
 		) test_counts ON p.id = test_counts.project_id
+		LEFT JOIN (
+			SELECT p.id as project_id, COUNT(DISTINCT tc.id) as unit_count
+			FROM projects p
+			LEFT JOIN test_files tf ON p.id = tf.project_id
+			LEFT JOIN test_cases tc ON tf.id = tc.test_file_id
+			WHERE tc.test_type = 'unit'
+			GROUP BY p.id
+		) unit_test_counts ON p.id = unit_test_counts.project_id
+		LEFT JOIN (
+			SELECT p.id as project_id, COUNT(DISTINCT tc.id) as integration_count
+			FROM projects p
+			LEFT JOIN test_files tf ON p.id = tf.project_id
+			LEFT JOIN test_cases tc ON tf.id = tc.test_file_id
+			WHERE tc.test_type = 'integration'
+			GROUP BY p.id
+		) integration_test_counts ON p.id = integration_test_counts.project_id
+		LEFT JOIN (
+			SELECT p.id as project_id, COUNT(DISTINCT tc.id) as e2e_count
+			FROM projects p
+			LEFT JOIN test_files tf ON p.id = tf.project_id
+			LEFT JOIN test_cases tc ON tf.id = tc.test_file_id
+			WHERE tc.test_type = 'e2e'
+			GROUP BY p.id
+		) e2e_test_counts ON p.id = e2e_test_counts.project_id
 		ORDER BY p.name`
 
 	rows, err := s.db.Query(query)
@@ -383,7 +581,8 @@ func (s *Server) getProjectsSummary() ([]ProjectSummary, error) {
 	for rows.Next() {
 		var p ProjectSummary
 		err := rows.Scan(&p.ID, &p.ProjectKey, &p.Name, &p.Description, &p.Status,
-			&p.ComponentCount, &p.RequirementCount, &p.TestCaseCount)
+			&p.ComponentCount, &p.RequirementCount, &p.ScopeCount, &p.UserStoryCount, &p.TechSpecCount, &p.TestCaseCount,
+			&p.UnitTestCount, &p.IntegrationTestCount, &p.E2ETestCount)
 		if err != nil {
 			return nil, err
 		}
