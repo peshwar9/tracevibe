@@ -35,8 +35,9 @@ Access the UI at http://localhost:8080 (default port).`,
 	Run: func(cmd *cobra.Command, args []string) {
 		port, _ := cmd.Flags().GetInt("port")
 		dbPath, _ := cmd.Flags().GetString("db-path")
+		projectBasePath, _ := cmd.Flags().GetString("project-base-path")
 
-		if err := startServer(port, dbPath); err != nil {
+		if err := startServer(port, dbPath, projectBasePath); err != nil {
 			fmt.Fprintf(os.Stderr, "Error starting server: %v\n", err)
 			os.Exit(1)
 		}
@@ -48,9 +49,10 @@ func init() {
 
 	serveCmd.Flags().IntP("port", "p", 8080, "Port to run the server on")
 	serveCmd.Flags().StringP("db-path", "d", getDefaultDBPath(), "SQLite database path")
+	serveCmd.Flags().String("project-base-path", "", "Base path for resolving test file paths (e.g., /path/to/project/)")
 }
 
-func startServer(port int, dbPath string) error {
+func startServer(port int, dbPath string, projectBasePath string) error {
 	// Initialize database
 	db, err := database.New(dbPath)
 	if err != nil {
@@ -64,7 +66,16 @@ func startServer(port int, dbPath string) error {
 		return fmt.Errorf("failed to parse templates: %w", err)
 	}
 
-	server := &Server{db: db, templates: tmpl}
+	// Get project base path from environment if not provided via flag
+	if projectBasePath == "" {
+		projectBasePath = os.Getenv("TRACEVIBE_PROJECT_BASE_PATH")
+	}
+
+	server := &Server{
+		db:              db,
+		templates:       tmpl,
+		projectBasePath: projectBasePath,
+	}
 
 	// Routes
 	http.HandleFunc("/", server.dashboardHandler)
@@ -82,8 +93,9 @@ func startServer(port int, dbPath string) error {
 }
 
 type Server struct {
-	db        *database.DB
-	templates *template.Template
+	db              *database.DB
+	templates       *template.Template
+	projectBasePath string
 }
 
 // Dashboard handler
@@ -424,9 +436,27 @@ func (s *Server) runTestsForComponent(projectKey, componentKey string) (*TestRes
 	var outputs []string
 	passed := 0
 	failed := 0
+	skipped := 0
 
 	for _, testFile := range testFiles {
-		success, output, err := s.runTestFile(testFile)
+		// Resolve test file path using project base path
+		fullTestPath := testFile
+		if s.projectBasePath != "" {
+			fullTestPath = filepath.Join(s.projectBasePath, testFile)
+		}
+
+		// Check if test file actually exists
+		if _, err := os.Stat(fullTestPath); os.IsNotExist(err) {
+			skipped++
+			if s.projectBasePath != "" {
+				outputs = append(outputs, fmt.Sprintf("Skipping %s: File does not exist at %s", testFile, fullTestPath))
+			} else {
+				outputs = append(outputs, fmt.Sprintf("Skipping %s: File does not exist (set TRACEVIBE_PROJECT_BASE_PATH or use --project-base-path)", testFile))
+			}
+			continue
+		}
+
+		success, output, err := s.runTestFile(fullTestPath, s.projectBasePath)
 		outputs = append(outputs, fmt.Sprintf("Running tests in %s:\n%s", testFile, output))
 
 		if err != nil {
@@ -440,6 +470,23 @@ func (s *Server) runTestsForComponent(projectKey, componentKey string) (*TestRes
 	}
 
 	duration := time.Since(startTime)
+
+	// Create summary message
+	var summaryParts []string
+	if passed > 0 {
+		summaryParts = append(summaryParts, fmt.Sprintf("✓ %d tests passed", passed))
+	}
+	if failed > 0 {
+		summaryParts = append(summaryParts, fmt.Sprintf("✗ %d tests failed", failed))
+	}
+	if skipped > 0 {
+		summaryParts = append(summaryParts, fmt.Sprintf("⚠ %d test files skipped (RTM references only)", skipped))
+	}
+
+	summary := strings.Join(summaryParts, ", ")
+	if summary != "" {
+		outputs = append([]string{summary + "\n"}, outputs...)
+	}
 
 	return &TestResult{
 		Passed:   passed,
@@ -479,7 +526,7 @@ func (s *Server) getTestFilesForComponent(projectKey, componentKey string) ([]st
 	return testFiles, nil
 }
 
-func (s *Server) runTestFile(testFile string) (bool, string, error) {
+func (s *Server) runTestFile(testFile, projectBasePath string) (bool, string, error) {
 	// Determine test runner based on file extension and run appropriate commands
 	var cmd *exec.Cmd
 	var workingDir string
@@ -492,25 +539,46 @@ func (s *Server) runTestFile(testFile string) (bool, string, error) {
 			packageDir = testFile[:strings.LastIndex(testFile, "/")]
 		}
 
-		// Set working directory to project root and run relative to it
-		workingDir = "."
+		// Set working directory to project base path if available, otherwise current dir
+		if projectBasePath != "" {
+			workingDir = projectBasePath
+			// Make packageDir relative to project base path
+			if relPath, err := filepath.Rel(projectBasePath, filepath.Dir(testFile)); err == nil {
+				packageDir = relPath
+			}
+		} else {
+			workingDir = "."
+		}
 		cmd = exec.Command("go", "test", "-v", "./"+packageDir)
 
 	case strings.HasSuffix(testFile, ".test.js") || strings.HasSuffix(testFile, ".spec.js") ||
 		 strings.HasSuffix(testFile, ".test.ts") || strings.HasSuffix(testFile, ".spec.ts"):
 		// JavaScript/TypeScript tests: use npm test or jest directly
-		// Try to detect if it's a frontend project by checking for package.json
-		packageDir := filepath.Dir(testFile)
-		for packageDir != "." && packageDir != "/" {
-			if _, err := os.Stat(filepath.Join(packageDir, "package.json")); err == nil {
-				workingDir = packageDir
-				break
+		if projectBasePath != "" {
+			// Start from project base path and look for package.json
+			workingDir = projectBasePath
+			packageDir := filepath.Dir(testFile)
+			for packageDir != "." && packageDir != "/" && packageDir != projectBasePath {
+				if _, err := os.Stat(filepath.Join(packageDir, "package.json")); err == nil {
+					workingDir = packageDir
+					break
+				}
+				packageDir = filepath.Dir(packageDir)
 			}
-			packageDir = filepath.Dir(packageDir)
-		}
+		} else {
+			// Try to detect if it's a frontend project by checking for package.json
+			packageDir := filepath.Dir(testFile)
+			for packageDir != "." && packageDir != "/" {
+				if _, err := os.Stat(filepath.Join(packageDir, "package.json")); err == nil {
+					workingDir = packageDir
+					break
+				}
+				packageDir = filepath.Dir(packageDir)
+			}
 
-		if workingDir == "" {
-			workingDir = "."
+			if workingDir == "" {
+				workingDir = "."
+			}
 		}
 
 		// Use jest to run specific test file
@@ -524,8 +592,18 @@ func (s *Server) runTestFile(testFile string) (bool, string, error) {
 
 	case strings.HasSuffix(testFile, ".test.py") || strings.HasSuffix(testFile, "_test.py") || strings.HasSuffix(testFile, "test_*.py"):
 		// Python tests: use pytest
-		workingDir = "."
-		cmd = exec.Command("python", "-m", "pytest", "-v", testFile)
+		if projectBasePath != "" {
+			workingDir = projectBasePath
+			// Make test file relative to project base path
+			if relPath, err := filepath.Rel(projectBasePath, testFile); err == nil {
+				cmd = exec.Command("python", "-m", "pytest", "-v", relPath)
+			} else {
+				cmd = exec.Command("python", "-m", "pytest", "-v", testFile)
+			}
+		} else {
+			workingDir = "."
+			cmd = exec.Command("python", "-m", "pytest", "-v", testFile)
+		}
 
 	default:
 		return false, "", fmt.Errorf("unsupported test file format: %s (supported: Go _test.go, JS/TS .test/.spec files, Python .test.py/_test.py/test_*.py)", testFile)
