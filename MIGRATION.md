@@ -91,7 +91,7 @@ Update install.sh and INSTALL.md with new repository URL:
 go install github.com/peshwar9/statsly/rtm-system/tracevibe@latest
 
 # New
-go install github.com/yourusername/tracevibe@latest
+go install github.com/peshwar9/tracevibe@latest
 ```
 
 ## Step 8: Clean Up Statsly Repository

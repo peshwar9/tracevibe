@@ -9,7 +9,7 @@ TraceVibe can be installed in multiple ways depending on your needs and platform
 If you have Go 1.21+ installed:
 
 ```bash
-go install github.com/peshwar9/statsly/rtm-system/tracevibe@latest
+go install github.com/peshwar9/tracevibe@latest
 ```
 
 This installs TraceVibe to `$GOPATH/bin` (usually `~/go/bin`). Make sure this directory is in your PATH.
@@ -20,29 +20,28 @@ Download the latest release for your platform:
 
 ```bash
 # macOS (Intel)
-curl -L https://github.com/peshwar9/statsly/releases/download/v1.0.0/tracevibe-darwin-amd64 -o tracevibe
+curl -L https://github.com/peshwar9/tracevibe/releases/download/v1.0.0/tracevibe-darwin-amd64 -o tracevibe
 chmod +x tracevibe
 sudo mv tracevibe /usr/local/bin/
 
 # macOS (Apple Silicon)
-curl -L https://github.com/peshwar9/statsly/releases/download/v1.0.0/tracevibe-darwin-arm64 -o tracevibe
+curl -L https://github.com/peshwar9/tracevibe/releases/download/v1.0.0/tracevibe-darwin-arm64 -o tracevibe
 chmod +x tracevibe
 sudo mv tracevibe /usr/local/bin/
 
 # Linux (x64)
-curl -L https://github.com/peshwar9/statsly/releases/download/v1.0.0/tracevibe-linux-amd64 -o tracevibe
+curl -L https://github.com/peshwar9/tracevibe/releases/download/v1.0.0/tracevibe-linux-amd64 -o tracevibe
 chmod +x tracevibe
 sudo mv tracevibe /usr/local/bin/
 
 # Windows
-# Download tracevibe-windows-amd64.exe from releases page
-# Add to PATH or move to C:\Windows\System32
+# Download tracevibe-windows-amd64.exe from GitHub releases page
 ```
 
 ### Option 3: Install Script (Unix-like systems)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/peshwar9/statsly/main/rtm-system/tracevibe/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/peshwar9/tracevibe/main/install.sh | bash
 ```
 
 ## Build from Source
@@ -55,8 +54,8 @@ curl -fsSL https://raw.githubusercontent.com/peshwar9/statsly/main/rtm-system/tr
 
 ```bash
 # Clone the repository
-git clone https://github.com/peshwar9/statsly.git
-cd statsly/rtm-system/tracevibe
+git clone https://github.com/peshwar9/tracevibe.git
+cd tracevibe
 
 # Build the binary
 go build -o tracevibe
@@ -139,14 +138,14 @@ Add to PATH:
 FROM golang:1.21-alpine AS builder
 WORKDIR /app
 RUN apk add --no-cache git
-RUN git clone https://github.com/peshwar9/statsly.git
-WORKDIR /app/statsly/rtm-system/tracevibe
+RUN git clone https://github.com/peshwar9/tracevibe.git
+WORKDIR /app/tracevibe
 RUN go build -o tracevibe
 
 FROM alpine:latest
 RUN apk --no-cache add ca-certificates
 WORKDIR /root/
-COPY --from=builder /app/statsly/rtm-system/tracevibe/tracevibe .
+COPY --from=builder /app/tracevibe/tracevibe .
 EXPOSE 8080
 CMD ["./tracevibe", "serve"]
 ```
@@ -186,8 +185,8 @@ rm -rf ~/.tracevibe
 
 ## Support
 
-- GitHub Issues: https://github.com/peshwar9/statsly/issues
-- Documentation: https://github.com/peshwar9/statsly/tree/main/rtm-system/tracevibe
+- GitHub Issues: https://github.com/peshwar9/tracevibe/issues
+- Documentation: https://github.com/peshwar9/tracevibe
 
 ## License
 

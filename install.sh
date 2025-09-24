@@ -5,7 +5,7 @@
 
 set -e
 
-REPO="peshwar9/statsly"
+REPO="peshwar9/tracevibe"
 VERSION="latest"
 INSTALL_DIR="/usr/local/bin"
 BINARY_NAME="tracevibe"

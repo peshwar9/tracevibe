@@ -18,7 +18,7 @@ TraceVibe is a lightweight, standalone CLI tool for managing Requirements Tracea
 go build -o tracevibe
 
 # Or install globally
-go install github.com/peshwar9/statsly/tracevibe@latest
+go install github.com/peshwar9/tracevibe@latest
 ```
 
 ## Usage
@@ -172,8 +172,8 @@ TraceVibe is built with:
 ### Building from Source
 
 ```bash
-git clone https://github.com/peshwar9/statsly.git
-cd statsly/rtm-system/tracevibe
+git clone https://github.com/peshwar9/tracevibe.git
+cd tracevibe
 go mod download
 go build -o tracevibe
 ```
