@@ -1,0 +1,95 @@
+name: Build macOS Only
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build (e.g., v1.0.0)'
+        required: true
+        type: string
+
+jobs:
+  build:
+    name: Build macOS Binary
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Build for Intel Mac
+        run: |
+          GOOS=darwin GOARCH=amd64 go build -v \
+            -ldflags="-s -w -X main.version=${{ github.event.inputs.version }}" \
+            -o tracevibe-darwin-amd64
+
+          echo "Intel Mac binary built successfully"
+          ls -lh tracevibe-darwin-amd64
+
+      - name: Build for Apple Silicon
+        run: |
+          GOOS=darwin GOARCH=arm64 go build -v \
+            -ldflags="-s -w -X main.version=${{ github.event.inputs.version }}" \
+            -o tracevibe-darwin-arm64
+
+          echo "Apple Silicon binary built successfully"
+          ls -lh tracevibe-darwin-arm64
+
+      - name: Create archives
+        run: |
+          # Intel Mac
+          tar -czf tracevibe-darwin-amd64.tar.gz tracevibe-darwin-amd64
+          shasum -a 256 tracevibe-darwin-amd64.tar.gz > tracevibe-darwin-amd64.tar.gz.sha256
+
+          # Apple Silicon
+          tar -czf tracevibe-darwin-arm64.tar.gz tracevibe-darwin-arm64
+          shasum -a 256 tracevibe-darwin-arm64.tar.gz > tracevibe-darwin-arm64.tar.gz.sha256
+
+          echo "Archives created:"
+          ls -lh *.tar.gz
+          echo ""
+          echo "Checksums:"
+          cat *.sha256
+
+      - name: Upload Intel Mac artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tracevibe-darwin-amd64
+          path: |
+            tracevibe-darwin-amd64.tar.gz
+            tracevibe-darwin-amd64.tar.gz.sha256
+
+      - name: Upload Apple Silicon artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tracevibe-darwin-arm64
+          path: |
+            tracevibe-darwin-arm64.tar.gz
+            tracevibe-darwin-arm64.tar.gz.sha256
+
+      - name: Summary
+        run: |
+          echo "## ✅ Build Complete!"
+          echo ""
+          echo "### Version: ${{ github.event.inputs.version }}"
+          echo ""
+          echo "### Built binaries:"
+          echo "- tracevibe-darwin-amd64 (Intel Mac)"
+          echo "- tracevibe-darwin-arm64 (Apple Silicon)"
+          echo ""
+          echo "### Download artifacts:"
+          echo "Go to the Actions tab and download the artifacts from this workflow run"
+          echo ""
+          echo "### Create release manually:"
+          echo '```bash'
+          echo '# Download artifacts first, then:'
+          echo 'gh release create ${{ github.event.inputs.version }} \'
+          echo '  --title "TraceVibe ${{ github.event.inputs.version }}" \'
+          echo '  --notes "macOS release" \'
+          echo '  tracevibe-darwin-*.tar.gz*'
+          echo '```'
