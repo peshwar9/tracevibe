@@ -535,15 +535,12 @@ func (s *Server) runTestFile(testFile, projectBasePath string) (bool, string, er
 	case strings.HasSuffix(testFile, "_test.go"):
 		// Go tests: run the package directory, not the individual file
 		packageDir := filepath.Dir(testFile)
-		if packageDir == "." || packageDir == "" {
-			packageDir = testFile[:strings.LastIndex(testFile, "/")]
-		}
 
 		// Set working directory to project base path if available, otherwise current dir
 		if projectBasePath != "" {
 			workingDir = projectBasePath
 			// Make packageDir relative to project base path
-			if relPath, err := filepath.Rel(projectBasePath, filepath.Dir(testFile)); err == nil {
+			if relPath, err := filepath.Rel(projectBasePath, packageDir); err == nil {
 				packageDir = relPath
 			}
 		} else {
