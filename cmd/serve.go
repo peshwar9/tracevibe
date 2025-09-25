@@ -165,17 +165,23 @@ func (s *Server) projectHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+type ComponentWithRequirements struct {
+	ComponentSummary
+	Requirements []RequirementTree `json:"requirements"`
+}
+
 func (s *Server) projectOverviewHandler(w http.ResponseWriter, r *http.Request, projectKey string) {
 	data := struct {
-		Title          string
-		Project        *database.Project
-		Components     []ComponentSummary
-		Requirements   []RequirementTree
-		ScopeCount     int
-		UserStoryCount int
-		TechSpecCount  int
-		TotalTestCount int
-		Error          string
+		Title                string
+		Project              *database.Project
+		Components           []ComponentSummary
+		ComponentsWithReqs   []ComponentWithRequirements
+		Requirements         []RequirementTree
+		ScopeCount           int
+		UserStoryCount       int
+		TechSpecCount        int
+		TotalTestCount       int
+		Error                string
 	}{
 		Title: "Project Overview",
 	}
@@ -203,18 +209,36 @@ func (s *Server) projectOverviewHandler(w http.ResponseWriter, r *http.Request, 
 		for _, comp := range components {
 			data.TotalTestCount += comp.TestCaseCount
 		}
+
+		// Get requirements for each component
+		var componentsWithReqs []ComponentWithRequirements
+		for _, comp := range components {
+			requirements, err := s.getRequirementsTree(projectKey, comp.ComponentKey)
+			if err != nil {
+				// Log error but continue with other components
+				continue
+			}
+
+			compWithReqs := ComponentWithRequirements{
+				ComponentSummary: comp,
+				Requirements:     requirements,
+			}
+			componentsWithReqs = append(componentsWithReqs, compWithReqs)
+
+			// Count by type for totals
+			for _, req := range requirements {
+				countRequirementsByType(req, &data.ScopeCount, &data.UserStoryCount, &data.TechSpecCount)
+			}
+		}
+		data.ComponentsWithReqs = componentsWithReqs
 	}
 
-	// Get requirements tree
+	// Get requirements tree for backward compatibility
 	requirements, err := s.getRequirementsTree(projectKey, "")
 	if err != nil {
 		data.Error = fmt.Sprintf("Error loading requirements: %v", err)
 	} else {
 		data.Requirements = requirements
-		// Count by type
-		for _, req := range requirements {
-			countRequirementsByType(req, &data.ScopeCount, &data.UserStoryCount, &data.TechSpecCount)
-		}
 	}
 
 	s.renderTemplate(w, "project-page.html", data)

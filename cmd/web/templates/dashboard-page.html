@@ -78,6 +78,7 @@
         <div class="card">
             <div class="card-header">
                 <h2 class="card-title">Projects</h2>
+                <button onclick="showCreateProjectModal()" class="btn btn-primary">+ Create Project</button>
             </div>
             <div class="card-content">
                 <table class="table">
@@ -146,7 +147,129 @@
         {{end}}
     </main>
 
+    <!-- Create Project Modal -->
+    <div id="createProjectModal" class="modal" style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5);">
+        <div class="modal-content" style="background-color: white; margin: 5% auto; padding: 20px; border-radius: 8px; max-width: 600px; width: 90%;">
+            <div class="modal-header" style="border-bottom: 1px solid #e5e7eb; padding-bottom: 1rem; margin-bottom: 1.5rem;">
+                <h2 style="margin: 0; color: #1e293b;">Create New Project</h2>
+            </div>
+            <div class="modal-body">
+                <div class="form-group" style="margin-bottom: 1rem;">
+                    <label class="form-label" style="display: block; margin-bottom: 0.5rem; font-weight: 500; color: #374151;">Project Name *</label>
+                    <input type="text" id="projectName" class="form-control" placeholder="Enter project name" style="width: 100%; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 4px;">
+                </div>
+                <div class="form-group" style="margin-bottom: 1rem;">
+                    <label class="form-label" style="display: block; margin-bottom: 0.5rem; font-weight: 500; color: #374151;">Project Key *</label>
+                    <input type="text" id="projectKey" class="form-control" placeholder="e.g., my-project" style="width: 100%; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 4px;">
+                    <small style="color: #6b7280; font-size: 0.875rem;">Used in URLs. Use lowercase letters, numbers, and hyphens only.</small>
+                </div>
+                <div class="form-group" style="margin-bottom: 1rem;">
+                    <label class="form-label" style="display: block; margin-bottom: 0.5rem; font-weight: 500; color: #374151;">Description</label>
+                    <textarea id="projectDescription" class="form-control" placeholder="Enter project description" style="width: 100%; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 4px; min-height: 100px; resize: vertical;"></textarea>
+                </div>
+                <div class="form-group" style="margin-bottom: 1rem;">
+                    <label class="form-label" style="display: block; margin-bottom: 0.5rem; font-weight: 500; color: #374151;">Repository URL</label>
+                    <input type="url" id="projectRepository" class="form-control" placeholder="https://github.com/user/repo" style="width: 100%; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 4px;">
+                </div>
+                <div class="form-group" style="margin-bottom: 1rem;">
+                    <label class="form-label" style="display: block; margin-bottom: 0.5rem; font-weight: 500; color: #374151;">Version</label>
+                    <input type="text" id="projectVersion" class="form-control" placeholder="1.0.0" style="width: 100%; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 4px;">
+                </div>
+            </div>
+            <div class="modal-footer" style="border-top: 1px solid #e5e7eb; padding-top: 1rem; display: flex; justify-content: flex-end; gap: 0.5rem;">
+                <button onclick="closeCreateProjectModal()" style="padding: 0.5rem 1rem; border: 1px solid #d1d5db; background: white; border-radius: 4px; cursor: pointer;">Cancel</button>
+                <button onclick="createProject()" style="padding: 0.5rem 1rem; background-color: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer;">Create Project</button>
+            </div>
+        </div>
+    </div>
+
     <script>
+        // Project creation functions
+        function showCreateProjectModal() {
+            document.getElementById('createProjectModal').style.display = 'block';
+        }
+
+        function closeCreateProjectModal() {
+            document.getElementById('createProjectModal').style.display = 'none';
+            // Clear form fields
+            document.getElementById('projectName').value = '';
+            document.getElementById('projectKey').value = '';
+            document.getElementById('projectDescription').value = '';
+            document.getElementById('projectRepository').value = '';
+            document.getElementById('projectVersion').value = '';
+        }
+
+        // Auto-generate project key from project name
+        document.getElementById('projectName').addEventListener('input', function(e) {
+            const name = e.target.value;
+            const key = name.toLowerCase()
+                .replace(/[^a-z0-9\s-]/g, '')
+                .replace(/\s+/g, '-')
+                .replace(/-+/g, '-')
+                .replace(/^-|-$/g, '');
+            document.getElementById('projectKey').value = key;
+        });
+
+        async function createProject() {
+            const name = document.getElementById('projectName').value.trim();
+            const projectKey = document.getElementById('projectKey').value.trim();
+            const description = document.getElementById('projectDescription').value.trim();
+            const repositoryURL = document.getElementById('projectRepository').value.trim();
+            const version = document.getElementById('projectVersion').value.trim();
+
+            // Validate required fields
+            if (!name) {
+                alert('Please enter a project name');
+                return;
+            }
+
+            if (!projectKey) {
+                alert('Please enter a project key');
+                return;
+            }
+
+            // Validate project key format
+            if (!/^[a-z0-9-]+$/.test(projectKey)) {
+                alert('Project key must contain only lowercase letters, numbers, and hyphens');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/projects/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name,
+                        project_key: projectKey,
+                        description: description || undefined,
+                        repository_url: repositoryURL || undefined,
+                        version: version || undefined
+                    })
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    closeCreateProjectModal();
+                    alert('Project created successfully!');
+                    window.location.reload();
+                } else {
+                    const error = await response.text();
+                    alert('Failed to create project: ' + error);
+                }
+            } catch (error) {
+                console.error('Error creating project:', error);
+                alert('Error creating project: ' + error.message);
+            }
+        }
+
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            const modal = document.getElementById('createProjectModal');
+            if (event.target === modal) {
+                closeCreateProjectModal();
+            }
+        }
+
         async function deleteProject(projectKey) {
             if (!confirm(`Are you sure you want to delete project '${projectKey}'? This action cannot be undone.`)) {
                 return;
