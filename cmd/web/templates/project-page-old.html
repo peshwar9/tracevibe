@@ -22,7 +22,7 @@
         .breadcrumb a { color: #3b82f6; text-decoration: none; }
 
         /* Cards */
-        .card { background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); overflow: hidden; margin-bottom: 2rem; }
+        .card { background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); overflow: hidden; }
         .card-header { background: #f1f5f9; padding: 1rem 1.5rem; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; }
         .card-title { font-size: 1.25rem; font-weight: 600; color: #1e293b; }
         .card-content { padding: 1.5rem; }
@@ -52,7 +52,7 @@
         .accordion-header:hover { background-color: #f3f4f6; }
         .accordion-header.active { background-color: #e5e7eb; }
         .accordion-toggle { width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; background: #e5e7eb; border-radius: 4px; font-weight: bold; transition: all 0.2s; }
-        .accordion-toggle.active { background: #3b82f6; color: white; }
+        .accordion-toggle.active { background: #3b82f6; color: white; transform: rotate(180deg); }
         .accordion-content { display: none; background: white; }
         .accordion-content.active { display: block; }
 
@@ -103,7 +103,7 @@
             <span>{{.Project.Name}}</span>
         </div>
 
-        <!-- Project Header -->
+        <!-- Project Header with Export Button -->
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
             <h1 style="font-size: 2rem; font-weight: 700; color: #1e293b; margin: 0;">{{.Project.Name}}</h1>
             <div style="display: flex; gap: 0.5rem;">
@@ -112,143 +112,138 @@
             </div>
         </div>
 
-        {{if .Error}}
-        <div style="background-color: #fef2f2; border: 1px solid #fecaca; color: #dc2626; padding: 1rem; border-radius: 6px; margin-bottom: 1rem;">{{.Error}}</div>
-        {{end}}
-
         {{if .Project.Description}}
-        <p style="color: #6b7280; margin-bottom: 2rem;">{{if .Project.Description}}{{.Project.Description}}{{else}}No description available.{{end}}</p>
+        <p style="color: #6b7280; margin-bottom: 2rem;">{{.Project.Description}}</p>
         {{end}}
 
-        <!-- Requirements -->
+        <!-- Components and Requirements -->
         <div class="card">
             <div class="card-header">
-                <h2 class="card-title">Requirements</h2>
-                <div style="font-size: 0.875rem; color: #6b7280;">
-                    Scopes: {{.ScopeCount}} | User Stories: {{.UserStoryCount}} | Tech Specs: {{.TechSpecCount}}
-                </div>
+                <h2 class="card-title">Requirements by Component</h2>
             </div>
             <div class="card-content">
                 <div class="requirements-tree">
                     {{if .Requirements}}
-                    {{range .Requirements}}
-                    {{if eq .RequirementType "SCOPE"}}
-                    <div class="accordion" data-requirement-id="{{.ID}}">
-                        <div class="accordion-header" onclick="toggleAccordion(this)">
-                            <div class="req-header">
-                                <div class="req-info">
-                                    <div style="font-weight: 600;">
-                                        <span class="badge badge-info" style="margin-right: 0.5rem;">SCOPE</span>
-                                        {{.Title}}
-                                    </div>
-                                    <div style="font-size: 0.875rem; color: #6b7280; margin-top: 0.25rem;">
-                                        <span>ID: {{.RequirementKey}}</span>
-                                        <span style="margin-left: 1rem;">Status: {{.Status}}</span>
-                                        <span style="margin-left: 1rem;">Priority: {{.Priority}}</span>
-                                    </div>
-                                    <div class="description-view" onclick="event.stopPropagation(); editDescription('{{.ID}}', this)">
-                                        {{if .Description}}{{.Description}}{{else}}<em style="color: #9ca3af;">Click to add description</em>{{end}}
-                                    </div>
-                                    <div class="description-edit" data-req-id="{{.ID}}">
-                                        <textarea class="form-control" style="margin-top: 0.5rem;">{{.Description}}</textarea>
-                                        <div style="margin-top: 0.5rem;">
-                                            <button class="btn btn-sm btn-primary" onclick="saveDescription('{{.ID}}')">Save</button>
-                                            <button class="btn btn-sm" onclick="cancelEdit('{{.ID}}')">Cancel</button>
+                    <div>
+                        {{range .Requirements}}
+                        {{if eq .RequirementType "SCOPE"}}
+                        <div class="accordion" data-requirement-id="{{.ID}}">
+                            <div class="accordion-header" onclick="toggleAccordion(this)">
+                                <div class="req-header">
+                                    <div class="req-info">
+                                        <div style="font-weight: 600;">
+                                            <span class="badge badge-info" style="margin-right: 0.5rem;">SCOPE</span>
+                                            {{.Title}}
+                                        </div>
+                                        <div style="font-size: 0.875rem; color: #6b7280; margin-top: 0.25rem;">
+                                            <span>ID: {{.RequirementKey}}</span>
+                                            <span style="margin-left: 1rem;">Status: {{.Status}}</span>
+                                            <span style="margin-left: 1rem;">Priority: {{.Priority}}</span>
+                                        </div>
+                                        <div class="description-view" onclick="event.stopPropagation(); editDescription('{{.ID}}', this)">
+                                            {{if .Description}}{{.Description}}{{else}}<em style="color: #9ca3af;">Click to add description</em>{{end}}
+                                        </div>
+                                        <div class="description-edit" data-req-id="{{.ID}}">
+                                            <textarea class="form-control" style="margin-top: 0.5rem;">{{.Description}}</textarea>
+                                            <div style="margin-top: 0.5rem;">
+                                                <button class="btn btn-sm btn-primary" onclick="saveDescription('{{.ID}}')">Save</button>
+                                                <button class="btn btn-sm" onclick="cancelEdit('{{.ID}}')">Cancel</button>
+                                            </div>
                                         </div>
                                     </div>
+                                    <div class="req-actions">
+                                        <button class="btn btn-sm btn-success" onclick="event.stopPropagation(); showAddUserStoryModal('{{.ID}}', '{{.RequirementKey}}')">+ Story</button>
+                                        <button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); deleteRequirement('{{.ID}}', 'scope')">Delete</button>
+                                    </div>
                                 </div>
-                                <div class="req-actions">
-                                    <button class="btn btn-sm btn-success" onclick="event.stopPropagation(); showAddUserStoryModal('{{.ID}}', '{{.RequirementKey}}')">+ Story</button>
-                                    <button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); deleteRequirement('{{.ID}}', 'scope')">Delete</button>
-                                </div>
+                                <div class="accordion-toggle">+</div>
                             </div>
-                            <div class="accordion-toggle">+</div>
-                        </div>
-                        <div class="accordion-content">
-                            {{if .Children}}
-                            <div style="padding: 1rem;">
-                                {{range .Children}}
-                                {{if eq .RequirementType "USER_STORY"}}
-                                <div class="accordion" style="margin-bottom: 0.75rem;" data-requirement-id="{{.ID}}">
-                                    <div class="accordion-header" onclick="toggleAccordion(this)" style="background: #f0f9ff;">
-                                        <div class="req-header">
-                                            <div class="req-info">
-                                                <div style="font-weight: 500;">
-                                                    <span class="badge badge-success" style="margin-right: 0.5rem;">USER STORY</span>
-                                                    {{.Title}}
-                                                </div>
-                                                <div style="font-size: 0.875rem; color: #6b7280; margin-top: 0.25rem;">
-                                                    <span>ID: {{.RequirementKey}}</span>
-                                                    <span style="margin-left: 1rem;">Status: {{.Status}}</span>
-                                                </div>
-                                                <div class="description-view" onclick="event.stopPropagation(); editDescription('{{.ID}}', this)">
-                                                    {{if .Description}}{{.Description}}{{else}}<em style="color: #9ca3af;">Click to add description</em>{{end}}
-                                                </div>
-                                                <div class="description-edit" data-req-id="{{.ID}}">
-                                                    <textarea class="form-control" style="margin-top: 0.5rem;">{{.Description}}</textarea>
-                                                    <div style="margin-top: 0.5rem;">
-                                                        <button class="btn btn-sm btn-primary" onclick="saveDescription('{{.ID}}')">Save</button>
-                                                        <button class="btn btn-sm" onclick="cancelEdit('{{.ID}}')">Cancel</button>
+                            <div class="accordion-content">
+                                {{if .Children}}
+                                <div style="padding: 1rem;">
+                                    {{range .Children}}
+                                    {{if eq .RequirementType "USER_STORY"}}
+                                    <div class="accordion" style="margin-bottom: 0.75rem;" data-requirement-id="{{.ID}}">
+                                        <div class="accordion-header" onclick="toggleAccordion(this)" style="background: #f0f9ff;">
+                                            <div class="req-header">
+                                                <div class="req-info">
+                                                    <div style="font-weight: 500;">
+                                                        <span class="badge badge-success" style="margin-right: 0.5rem;">USER STORY</span>
+                                                        {{.Title}}
+                                                    </div>
+                                                    <div style="font-size: 0.875rem; color: #6b7280; margin-top: 0.25rem;">
+                                                        <span>ID: {{.RequirementKey}}</span>
+                                                        <span style="margin-left: 1rem;">Status: {{.Status}}</span>
+                                                    </div>
+                                                    <div class="description-view" onclick="event.stopPropagation(); editDescription('{{.ID}}', this)">
+                                                        {{if .Description}}{{.Description}}{{else}}<em style="color: #9ca3af;">Click to add description</em>{{end}}
+                                                    </div>
+                                                    <div class="description-edit" data-req-id="{{.ID}}">
+                                                        <textarea class="form-control" style="margin-top: 0.5rem;">{{.Description}}</textarea>
+                                                        <div style="margin-top: 0.5rem;">
+                                                            <button class="btn btn-sm btn-primary" onclick="saveDescription('{{.ID}}')">Save</button>
+                                                            <button class="btn btn-sm" onclick="cancelEdit('{{.ID}}')">Cancel</button>
+                                                        </div>
                                                     </div>
                                                 </div>
+                                                <div class="req-actions">
+                                                    <button class="btn btn-sm btn-warning" onclick="event.stopPropagation(); showAddTechSpecModal('{{.ID}}', '{{.RequirementKey}}')">+ Tech Spec</button>
+                                                    <button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); deleteRequirement('{{.ID}}', 'user story')">Delete</button>
+                                                </div>
                                             </div>
-                                            <div class="req-actions">
-                                                <button class="btn btn-sm btn-warning" onclick="event.stopPropagation(); showAddTechSpecModal('{{.ID}}', '{{.RequirementKey}}')">+ Tech Spec</button>
-                                                <button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); deleteRequirement('{{.ID}}', 'user story')">Delete</button>
-                                            </div>
+                                            <div class="accordion-toggle">+</div>
                                         </div>
-                                        <div class="accordion-toggle">+</div>
-                                    </div>
-                                    <div class="accordion-content">
-                                        {{if .Children}}
-                                        <div style="padding: 0.75rem;">
-                                            {{range .Children}}
-                                            {{if eq .RequirementType "TECH_SPEC"}}
-                                            <div style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 4px; padding: 0.75rem; margin-bottom: 0.5rem;" data-requirement-id="{{.ID}}">
-                                                <div class="req-header">
-                                                    <div class="req-info">
-                                                        <div style="font-weight: 500; font-size: 0.9rem;">
-                                                            <span class="badge badge-warning" style="margin-right: 0.5rem;">TECH SPEC</span>
-                                                            {{.Title}}
-                                                        </div>
-                                                        <div style="font-size: 0.8rem; color: #6b7280;">
-                                                            <span>ID: {{.RequirementKey}}</span>
-                                                            <span style="margin-left: 0.5rem;">Status: {{.Status}}</span>
-                                                        </div>
-                                                        <div class="description-view" onclick="editDescription('{{.ID}}', this)">
-                                                            {{if .Description}}{{.Description}}{{else}}<em style="color: #9ca3af;">Click to add description</em>{{end}}
-                                                        </div>
-                                                        <div class="description-edit" data-req-id="{{.ID}}">
-                                                            <textarea class="form-control" style="margin-top: 0.5rem;">{{.Description}}</textarea>
-                                                            <div style="margin-top: 0.5rem;">
-                                                                <button class="btn btn-sm btn-primary" onclick="saveDescription('{{.ID}}')">Save</button>
-                                                                <button class="btn btn-sm" onclick="cancelEdit('{{.ID}}')">Cancel</button>
+                                        <div class="accordion-content">
+                                            {{if .Children}}
+                                            <div style="padding: 0.75rem;">
+                                                {{range .Children}}
+                                                {{if eq .RequirementType "TECH_SPEC"}}
+                                                <div style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 4px; padding: 0.75rem; margin-bottom: 0.5rem;" data-requirement-id="{{.ID}}">
+                                                    <div class="req-header">
+                                                        <div class="req-info">
+                                                            <div style="font-weight: 500; font-size: 0.9rem;">
+                                                                <span class="badge badge-warning" style="margin-right: 0.5rem;">TECH SPEC</span>
+                                                                {{.Title}}
+                                                            </div>
+                                                            <div style="font-size: 0.8rem; color: #6b7280;">
+                                                                <span>ID: {{.RequirementKey}}</span>
+                                                                <span style="margin-left: 0.5rem;">Status: {{.Status}}</span>
+                                                            </div>
+                                                            <div class="description-view" onclick="editDescription('{{.ID}}', this)">
+                                                                {{if .Description}}{{.Description}}{{else}}<em style="color: #9ca3af;">Click to add description</em>{{end}}
+                                                            </div>
+                                                            <div class="description-edit" data-req-id="{{.ID}}">
+                                                                <textarea class="form-control" style="margin-top: 0.5rem;">{{.Description}}</textarea>
+                                                                <div style="margin-top: 0.5rem;">
+                                                                    <button class="btn btn-sm btn-primary" onclick="saveDescription('{{.ID}}')">Save</button>
+                                                                    <button class="btn btn-sm" onclick="cancelEdit('{{.ID}}')">Cancel</button>
+                                                                </div>
                                                             </div>
                                                         </div>
-                                                    </div>
-                                                    <div class="req-actions">
-                                                        <button class="btn btn-sm btn-danger" onclick="deleteRequirement('{{.ID}}', 'tech spec')">Delete</button>
+                                                        <div class="req-actions">
+                                                            <button class="btn btn-sm btn-danger" onclick="deleteRequirement('{{.ID}}', 'tech spec')">Delete</button>
+                                                        </div>
                                                     </div>
                                                 </div>
+                                                {{end}}
+                                                {{end}}
                                             </div>
-                                            {{end}}
+                                            {{else}}
+                                            <div style="padding: 0.75rem; color: #6b7280; font-style: italic;">No tech specs defined</div>
                                             {{end}}
                                         </div>
-                                        {{else}}
-                                        <div style="padding: 0.75rem; color: #6b7280; font-style: italic;">No tech specs defined</div>
-                                        {{end}}
                                     </div>
+                                    {{end}}
+                                    {{end}}
                                 </div>
-                                {{end}}
+                                {{else}}
+                                <div style="padding: 1rem; color: #6b7280; font-style: italic;">No user stories defined</div>
                                 {{end}}
                             </div>
-                            {{else}}
-                            <div style="padding: 1rem; color: #6b7280; font-style: italic;">No user stories defined</div>
-                            {{end}}
                         </div>
+                        {{end}}
+                        {{end}}
                     </div>
-                    {{end}}
-                    {{end}}
                     {{else}}
                     <p style="color: #6b7280; text-align: center; padding: 2rem;">No requirements found. Click "Add Scope" to get started!</p>
                     {{end}}
@@ -366,30 +361,25 @@
     </div>
 
     <script>
-        // Project data from server - need to get the actual component ID
+        // Project data from server
         const projectData = {
             projectId: '{{.Project.ID}}',
             projectKey: '{{.Project.ProjectKey}}',
-            componentId: '{{if .Components}}{{(index .Components 0).ID}}{{else}}{{.Project.ID}}{{end}}' // Use first component or project ID as fallback
+            componentId: '{{if .Component}}{{.Component.ID}}{{end}}'
         };
-
-        console.log('Project Data:', projectData); // Debug logging
 
         // Modal functions
         function showAddScopeModal() {
-            console.log('Opening scope modal');
             document.getElementById('addScopeModal').classList.add('active');
         }
 
         function showAddUserStoryModal(parentId, parentKey) {
-            console.log('Opening user story modal for parent:', parentId, parentKey);
             document.getElementById('addUserStoryModal').classList.add('active');
             document.getElementById('parentScopeKey').textContent = parentKey;
             document.getElementById('addUserStoryModal').dataset.parentId = parentId;
         }
 
         function showAddTechSpecModal(parentId, parentKey) {
-            console.log('Opening tech spec modal for parent:', parentId, parentKey);
             document.getElementById('addTechSpecModal').classList.add('active');
             document.getElementById('parentStoryKey').textContent = parentKey;
             document.getElementById('addTechSpecModal').dataset.parentId = parentId;
@@ -399,18 +389,11 @@
             document.getElementById(modalId).classList.remove('active');
             // Clear form fields
             const modal = document.getElementById(modalId);
-            modal.querySelectorAll('input, textarea, select').forEach(input => {
-                if (input.tagName.toLowerCase() === 'select') {
-                    input.selectedIndex = input.options[0].hasAttribute('selected') ? input.selectedIndex : 0;
-                } else {
-                    input.value = '';
-                }
-            });
+            modal.querySelectorAll('input, textarea').forEach(input => input.value = '');
         }
 
         // Toggle accordion
         function toggleAccordion(header) {
-            console.log('Toggling accordion');
             const content = header.nextElementSibling;
             const toggle = header.querySelector('.accordion-toggle');
             const isActive = content.classList.contains('active');
@@ -430,7 +413,6 @@
 
         // Edit description inline
         function editDescription(reqId, viewElement) {
-            console.log('Editing description for:', reqId);
             viewElement.classList.add('editing');
             const editDiv = viewElement.nextElementSibling;
             editDiv.classList.add('active');
@@ -438,7 +420,6 @@
         }
 
         function cancelEdit(reqId) {
-            console.log('Canceling edit for:', reqId);
             const editDiv = document.querySelector(`.description-edit[data-req-id="${reqId}"]`);
             const viewDiv = editDiv.previousElementSibling;
             editDiv.classList.remove('active');
@@ -446,7 +427,6 @@
         }
 
         async function saveDescription(reqId) {
-            console.log('Saving description for:', reqId);
             const editDiv = document.querySelector(`.description-edit[data-req-id="${reqId}"]`);
             const viewDiv = editDiv.previousElementSibling;
             const description = editDiv.querySelector('textarea').value;
@@ -463,11 +443,9 @@
                     editDiv.classList.remove('active');
                     viewDiv.classList.remove('editing');
                 } else {
-                    const error = await response.text();
-                    alert('Failed to update description: ' + error);
+                    alert('Failed to update description');
                 }
             } catch (error) {
-                console.error('Error updating description:', error);
                 alert('Error updating description: ' + error.message);
             }
         }
@@ -484,15 +462,13 @@
                 return;
             }
 
-            console.log('Creating scope:', { title, description, category, priority });
-
             try {
                 const response = await fetch('/api/requirements/create', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         project_id: projectData.projectId,
-                        component_id: projectData.componentId,
+                        component_id: projectData.componentId || projectData.projectId,
                         requirement_type: 'scope',
                         title,
                         description: description || null,
@@ -510,7 +486,6 @@
                     alert('Failed to create scope: ' + error);
                 }
             } catch (error) {
-                console.error('Error creating scope:', error);
                 alert('Error creating scope: ' + error.message);
             }
         }
@@ -528,15 +503,13 @@
                 return;
             }
 
-            console.log('Creating user story:', { title, description, priority, parentId });
-
             try {
                 const response = await fetch('/api/requirements/create', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         project_id: projectData.projectId,
-                        component_id: projectData.componentId,
+                        component_id: projectData.componentId || projectData.projectId,
                         parent_requirement_id: parentId,
                         requirement_type: 'user_story',
                         title,
@@ -555,7 +528,6 @@
                     alert('Failed to create user story: ' + error);
                 }
             } catch (error) {
-                console.error('Error creating user story:', error);
                 alert('Error creating user story: ' + error.message);
             }
         }
@@ -573,15 +545,13 @@
                 return;
             }
 
-            console.log('Creating tech spec:', { title, description, priority, parentId });
-
             try {
                 const response = await fetch('/api/requirements/create', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         project_id: projectData.projectId,
-                        component_id: projectData.componentId,
+                        component_id: projectData.componentId || projectData.projectId,
                         parent_requirement_id: parentId,
                         requirement_type: 'tech_spec',
                         title,
@@ -600,7 +570,6 @@
                     alert('Failed to create tech spec: ' + error);
                 }
             } catch (error) {
-                console.error('Error creating tech spec:', error);
                 alert('Error creating tech spec: ' + error.message);
             }
         }
@@ -610,8 +579,6 @@
             if (!confirm(`Are you sure you want to delete this ${reqType}? This will also delete all child requirements.`)) {
                 return;
             }
-
-            console.log('Deleting requirement:', reqId, reqType);
 
             try {
                 const response = await fetch(`/api/requirements/${reqId}`, {
@@ -625,7 +592,6 @@
                     alert('Failed to delete requirement: ' + error);
                 }
             } catch (error) {
-                console.error('Error deleting requirement:', error);
                 alert('Error deleting requirement: ' + error.message);
             }
         }
@@ -636,11 +602,6 @@
                 event.target.classList.remove('active');
             }
         }
-
-        // Debug logging
-        document.addEventListener('DOMContentLoaded', function() {
-            console.log('DOM loaded, project data:', projectData);
-        });
     </script>
 </body>
 </html>

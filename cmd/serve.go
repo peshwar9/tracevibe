@@ -88,6 +88,8 @@ func startServer(port int, dbPath string, projectBasePath string) error {
 	http.HandleFunc("/export/", server.exportHandler)
 	http.HandleFunc("/api/test/run", server.testRunHandler)
 	http.HandleFunc("/api/project/", server.projectAPIHandler)
+	http.HandleFunc("/api/projects/create", server.createProjectHandler)
+	http.HandleFunc("/api/requirements/", server.requirementsAPIHandler)
 	http.HandleFunc("/api/", server.apiHandler)
 
 	addr := fmt.Sprintf(":%d", port)
@@ -1324,4 +1326,248 @@ func (s *Server) parseMakeTestOutput(output string) (passed, failed int) {
 	}
 
 	return passed, failed
+}
+
+// Requirements API handlers
+func (s *Server) requirementsAPIHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	path := r.URL.Path[len("/api/requirements/"):]
+	parts := splitPath(path)
+
+	switch r.Method {
+	case http.MethodGet:
+		// GET /api/requirements/{id} - Get requirement by ID
+		if len(parts) == 1 && parts[0] != "" {
+			s.getRequirementHandler(w, r, parts[0])
+			return
+		}
+
+	case http.MethodPost:
+		// POST /api/requirements/create - Create new requirement
+		if len(parts) == 1 && parts[0] == "create" {
+			s.createRequirementHandler(w, r)
+			return
+		}
+		// POST /api/requirements/generate-key - Generate next requirement key
+		if len(parts) == 1 && parts[0] == "generate-key" {
+			s.generateRequirementKeyHandler(w, r)
+			return
+		}
+
+	case http.MethodPut:
+		// PUT /api/requirements/{id} - Update requirement
+		if len(parts) == 1 && parts[0] != "" {
+			s.updateRequirementHandler(w, r, parts[0])
+			return
+		}
+		// PUT /api/requirements/{id}/description - Update description only
+		if len(parts) == 2 && parts[1] == "description" {
+			s.updateRequirementDescriptionHandler(w, r, parts[0])
+			return
+		}
+
+	case http.MethodDelete:
+		// DELETE /api/requirements/{id} - Delete requirement
+		if len(parts) == 1 && parts[0] != "" {
+			s.deleteRequirementHandler(w, r, parts[0])
+			return
+		}
+	}
+
+	http.Error(w, "Not found", http.StatusNotFound)
+}
+
+// Project creation API handler
+func (s *Server) createProjectHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var projectData struct {
+		Name          string `json:"name"`
+		ProjectKey    string `json:"project_key"`
+		Description   string `json:"description,omitempty"`
+		RepositoryURL string `json:"repository_url,omitempty"`
+		Version       string `json:"version,omitempty"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&projectData); err != nil {
+		http.Error(w, fmt.Sprintf("Invalid request body: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	// Validate required fields
+	if projectData.Name == "" {
+		http.Error(w, "Project name is required", http.StatusBadRequest)
+		return
+	}
+
+	if projectData.ProjectKey == "" {
+		http.Error(w, "Project key is required", http.StatusBadRequest)
+		return
+	}
+
+	// Create project
+	project := &database.Project{
+		ProjectKey: projectData.ProjectKey,
+		Name:       projectData.Name,
+		Status:     "active",
+	}
+
+	// Set optional fields
+	if projectData.Description != "" {
+		project.Description = &projectData.Description
+	}
+	if projectData.RepositoryURL != "" {
+		project.RepositoryURL = &projectData.RepositoryURL
+	}
+	if projectData.Version != "" {
+		project.Version = &projectData.Version
+	}
+
+	if err := s.db.CreateProject(project); err != nil {
+		http.Error(w, fmt.Sprintf("Error creating project: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// TODO: Create a default system component for the project later
+
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success":     true,
+		"id":          project.ID,
+		"project_key": project.ProjectKey,
+	})
+}
+
+func (s *Server) getRequirementHandler(w http.ResponseWriter, r *http.Request, requirementID string) {
+	requirement, err := s.db.GetRequirementByID(requirementID)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error getting requirement: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(requirement)
+}
+
+func (s *Server) createRequirementHandler(w http.ResponseWriter, r *http.Request) {
+	var req database.Requirement
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, fmt.Sprintf("Invalid request body: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	// Generate requirement key if not provided
+	if req.RequirementKey == "" {
+		key, err := s.db.GenerateNextRequirementKey(req.ProjectID, req.ComponentID, req.RequirementType, req.ParentRequirementID)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Error generating requirement key: %v", err), http.StatusInternalServerError)
+			return
+		}
+		req.RequirementKey = key
+	}
+
+	// Set defaults
+	if req.Priority == "" {
+		req.Priority = "medium"
+	}
+	if req.Status == "" {
+		req.Status = "not_started"
+	}
+
+	if err := s.db.CreateRequirement(&req); err != nil {
+		http.Error(w, fmt.Sprintf("Error creating requirement: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"id":      req.ID,
+		"key":     req.RequirementKey,
+	})
+}
+
+func (s *Server) updateRequirementHandler(w http.ResponseWriter, r *http.Request, requirementID string) {
+	var req database.Requirement
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, fmt.Sprintf("Invalid request body: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	req.ID = requirementID
+	if err := s.db.UpdateRequirement(&req); err != nil {
+		http.Error(w, fmt.Sprintf("Error updating requirement: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"id":      requirementID,
+	})
+}
+
+func (s *Server) updateRequirementDescriptionHandler(w http.ResponseWriter, r *http.Request, requirementID string) {
+	var body struct {
+		Description string `json:"description"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, fmt.Sprintf("Invalid request body: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	if err := s.db.UpdateRequirementDescription(requirementID, body.Description); err != nil {
+		http.Error(w, fmt.Sprintf("Error updating description: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"id":      requirementID,
+	})
+}
+
+func (s *Server) deleteRequirementHandler(w http.ResponseWriter, r *http.Request, requirementID string) {
+	if err := s.db.DeleteRequirement(requirementID); err != nil {
+		http.Error(w, fmt.Sprintf("Error deleting requirement: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"id":      requirementID,
+	})
+}
+
+func (s *Server) generateRequirementKeyHandler(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		ProjectID           string  `json:"project_id"`
+		ComponentID         string  `json:"component_id"`
+		RequirementType     string  `json:"requirement_type"`
+		ParentRequirementID *string `json:"parent_requirement_id,omitempty"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, fmt.Sprintf("Invalid request body: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	key, err := s.db.GenerateNextRequirementKey(
+		body.ProjectID,
+		body.ComponentID,
+		body.RequirementType,
+		body.ParentRequirementID,
+	)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error generating key: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"key":     key,
+	})
 }
