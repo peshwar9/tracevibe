@@ -117,7 +117,21 @@
                             </td>
                             <td>
                                 <a href="/projects/{{.ProjectKey}}" class="btn btn-primary" style="margin-right: 0.5rem;">View Details</a>
-                                <a href="/export/{{.ProjectKey}}" class="btn" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 0.5rem 1rem; border-radius: 6px; text-decoration: none; margin-right: 0.5rem;" title="Export as HTML">📄 Export</a>
+                                <!-- Export Dropdown -->
+                                <div style="position: relative; display: inline-block; margin-right: 0.5rem;">
+                                    <button onclick="toggleProjectExportDropdown('{{.ProjectKey}}')" class="btn" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 0.5rem 1rem; border-radius: 6px; border: none; cursor: pointer; display: flex; align-items: center; gap: 0.25rem;">
+                                        📤 Export
+                                        <span style="font-size: 0.75rem;">▼</span>
+                                    </button>
+                                    <div id="exportDropdown-{{.ProjectKey}}" style="display: none; position: absolute; right: 0; top: 100%; background: white; min-width: 180px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border-radius: 6px; border: 1px solid #e5e7eb; z-index: 1000; margin-top: 0.25rem;">
+                                        <div style="padding: 0.5rem 0;">
+                                            <a href="/export/{{.ProjectKey}}" style="display: block; padding: 0.5rem 1rem; color: #374151; text-decoration: none; font-size: 0.875rem;" onmouseover="this.style.backgroundColor='#f9fafb'" onmouseout="this.style.backgroundColor='white'">📄 HTML Report</a>
+                                            <a href="/export-json/{{.ProjectKey}}" style="display: block; padding: 0.5rem 1rem; color: #374151; text-decoration: none; font-size: 0.875rem;" onmouseover="this.style.backgroundColor='#f9fafb'" onmouseout="this.style.backgroundColor='white'">🤖 JSON (LLM)</a>
+                                            <a href="/export-yaml/{{.ProjectKey}}" style="display: block; padding: 0.5rem 1rem; color: #374151; text-decoration: none; font-size: 0.875rem;" onmouseover="this.style.backgroundColor='#f9fafb'" onmouseout="this.style.backgroundColor='white'">📋 YAML (LLM)</a>
+                                            <a href="/export-markdown/{{.ProjectKey}}" style="display: block; padding: 0.5rem 1rem; color: #374151; text-decoration: none; font-size: 0.875rem;" onmouseover="this.style.backgroundColor='#f9fafb'" onmouseout="this.style.backgroundColor='white'">📝 Markdown</a>
+                                        </div>
+                                    </div>
+                                </div>
                                 <button onclick="deleteProject('{{.ProjectKey}}')" class="btn" style="background-color: #ef4444; color: white; padding: 0.5rem 1rem; border-radius: 6px; border: none; cursor: pointer;">Delete</button>
                             </td>
                         </tr>
@@ -262,11 +276,38 @@
             }
         }
 
-        // Close modal when clicking outside
+        // Export dropdown functionality for dashboard
+        function toggleProjectExportDropdown(projectKey) {
+            console.log('Toggling export dropdown for project:', projectKey);
+            const dropdown = document.getElementById('exportDropdown-' + projectKey);
+            const isVisible = dropdown.style.display !== 'none';
+
+            // Close all other dropdowns first
+            document.querySelectorAll('[id^="exportDropdown-"]').forEach(d => {
+                if (d !== dropdown) {
+                    d.style.display = 'none';
+                }
+            });
+
+            if (isVisible) {
+                dropdown.style.display = 'none';
+            } else {
+                dropdown.style.display = 'block';
+            }
+        }
+
+        // Close modal and dropdowns when clicking outside
         window.onclick = function(event) {
             const modal = document.getElementById('createProjectModal');
             if (event.target === modal) {
                 closeCreateProjectModal();
+            }
+
+            // Close export dropdowns if clicking outside
+            if (!event.target.closest('button')) {
+                document.querySelectorAll('[id^="exportDropdown-"]').forEach(dropdown => {
+                    dropdown.style.display = 'none';
+                });
             }
         }
 

@@ -15,6 +15,7 @@ import (
 
 	"github.com/peshwar9/tracevibe/internal/database"
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 )
 
 //go:embed web/templates/*.html
@@ -86,6 +87,9 @@ func startServer(port int, dbPath string, projectBasePath string) error {
 	http.HandleFunc("/", server.dashboardHandler)
 	http.HandleFunc("/projects/", server.projectHandler)
 	http.HandleFunc("/export/", server.exportHandler)
+	http.HandleFunc("/export-json/", server.exportJSONHandler)
+	http.HandleFunc("/export-yaml/", server.exportYAMLHandler)
+	http.HandleFunc("/export-markdown/", server.exportMarkdownHandler)
 	http.HandleFunc("/api/test/run", server.testRunHandler)
 	http.HandleFunc("/api/project/", server.projectAPIHandler)
 	http.HandleFunc("/api/projects/create", server.createProjectHandler)
@@ -393,6 +397,265 @@ func (s *Server) exportHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Error generating export: %v", err), http.StatusInternalServerError)
 		return
+	}
+}
+
+// JSON export handler for LLM consumption
+func (s *Server) exportJSONHandler(w http.ResponseWriter, r *http.Request) {
+	projectKey, exportData, err := s.getExportData(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Set content type for JSON download
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s-rtm-export.json"`, projectKey))
+
+	// Convert to JSON
+	jsonData, err := json.MarshalIndent(exportData, "", "  ")
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error generating JSON: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Write(jsonData)
+}
+
+// YAML export handler for LLM consumption
+func (s *Server) exportYAMLHandler(w http.ResponseWriter, r *http.Request) {
+	projectKey, exportData, err := s.getExportData(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Set content type for YAML download
+	w.Header().Set("Content-Type", "application/x-yaml; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s-rtm-export.yaml"`, projectKey))
+
+	// Convert to YAML
+	yamlData, err := yaml.Marshal(exportData)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error generating YAML: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Write(yamlData)
+}
+
+// Markdown export handler for human/dev consumption
+func (s *Server) exportMarkdownHandler(w http.ResponseWriter, r *http.Request) {
+	projectKey, exportData, err := s.getExportData(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Set content type for markdown download
+	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s-rtm-export.md"`, projectKey))
+
+	// Generate markdown content
+	markdown := s.generateMarkdown(exportData)
+	w.Write([]byte(markdown))
+}
+
+// Helper function to get export data
+func (s *Server) getExportData(r *http.Request) (string, map[string]interface{}, error) {
+	// Extract project key from URL path
+	var path string
+	if strings.HasPrefix(r.URL.Path, "/export-json/") {
+		path = r.URL.Path[len("/export-json/"):]
+	} else if strings.HasPrefix(r.URL.Path, "/export-yaml/") {
+		path = r.URL.Path[len("/export-yaml/"):]
+	} else if strings.HasPrefix(r.URL.Path, "/export-markdown/") {
+		path = r.URL.Path[len("/export-markdown/"):]
+	}
+
+	if path == "" {
+		return "", nil, fmt.Errorf("project key required")
+	}
+
+	// Remove trailing slash and any extra path components
+	projectKey := strings.Split(path, "/")[0]
+	if projectKey == "" {
+		return "", nil, fmt.Errorf("project key required")
+	}
+
+	// Get project data
+	project, err := s.db.GetProjectByKey(projectKey)
+	if err != nil || project == nil {
+		return "", nil, fmt.Errorf("project not found")
+	}
+
+	// Get components
+	components, err := s.getComponentsSummary(projectKey)
+	if err != nil {
+		return "", nil, fmt.Errorf("error loading components: %v", err)
+	}
+
+	// Get requirements tree
+	requirements, err := s.getRequirementsTree(projectKey, "")
+	if err != nil {
+		return "", nil, fmt.Errorf("error loading requirements: %v", err)
+	}
+
+	// Calculate statistics
+	stats := map[string]interface{}{
+		"total_components":    len(components),
+		"total_requirements":  0,
+		"total_scopes":       0,
+		"total_user_stories": 0,
+		"total_tech_specs":   0,
+		"total_test_cases":   0,
+	}
+
+	scopeCount, userStoryCount, techSpecCount := 0, 0, 0
+	testCaseCount := 0
+	for _, req := range requirements {
+		countRequirementsByType(req, &scopeCount, &userStoryCount, &techSpecCount)
+		testCaseCount += countTestCases(req)
+	}
+
+	stats["total_scopes"] = scopeCount
+	stats["total_user_stories"] = userStoryCount
+	stats["total_tech_specs"] = techSpecCount
+	stats["total_requirements"] = scopeCount + userStoryCount + techSpecCount
+	stats["total_test_cases"] = testCaseCount
+
+	// Prepare export data
+	exportData := map[string]interface{}{
+		"project":      project,
+		"components":   components,
+		"requirements": requirements,
+		"statistics":   stats,
+		"export_date":  time.Now().Format("2006-01-02 15:04:05"),
+		"export_timestamp": time.Now().Unix(),
+	}
+
+	return projectKey, exportData, nil
+}
+
+// Helper function to generate markdown content
+func (s *Server) generateMarkdown(exportData map[string]interface{}) string {
+	project := exportData["project"].(*database.Project)
+	components := exportData["components"].([]ComponentSummary)
+	requirements := exportData["requirements"].([]RequirementTree)
+	stats := exportData["statistics"].(map[string]interface{})
+	exportDate := exportData["export_date"].(string)
+
+	var md strings.Builder
+
+	// Header
+	md.WriteString(fmt.Sprintf("# %s - Requirements Traceability Matrix\n\n", project.Name))
+	md.WriteString(fmt.Sprintf("**Project Key:** %s  \n", project.ProjectKey))
+	if project.Description != nil && *project.Description != "" {
+		md.WriteString(fmt.Sprintf("**Description:** %s  \n", *project.Description))
+	}
+	if project.RepositoryURL != nil && *project.RepositoryURL != "" {
+		md.WriteString(fmt.Sprintf("**Repository:** %s  \n", *project.RepositoryURL))
+	}
+	if project.Version != nil && *project.Version != "" {
+		md.WriteString(fmt.Sprintf("**Version:** %s  \n", *project.Version))
+	}
+	md.WriteString(fmt.Sprintf("**Export Date:** %s  \n\n", exportDate))
+
+	// Statistics
+	md.WriteString("## 📊 Project Statistics\n\n")
+	md.WriteString("| Metric | Count |\n")
+	md.WriteString("|--------|-------|\n")
+	md.WriteString(fmt.Sprintf("| Components | %v |\n", stats["total_components"]))
+	md.WriteString(fmt.Sprintf("| Total Requirements | %v |\n", stats["total_requirements"]))
+	md.WriteString(fmt.Sprintf("| Scopes | %v |\n", stats["total_scopes"]))
+	md.WriteString(fmt.Sprintf("| User Stories | %v |\n", stats["total_user_stories"]))
+	md.WriteString(fmt.Sprintf("| Technical Specifications | %v |\n", stats["total_tech_specs"]))
+	md.WriteString(fmt.Sprintf("| Test Cases | %v |\n\n", stats["total_test_cases"]))
+
+	// Components
+	md.WriteString("## 🏗️ System Components\n\n")
+	for _, comp := range components {
+		md.WriteString(fmt.Sprintf("### %s\n", comp.Name))
+		md.WriteString(fmt.Sprintf("- **Type:** %s\n", comp.ComponentType))
+		if comp.Technology != "" {
+			md.WriteString(fmt.Sprintf("- **Technology:** %s\n", comp.Technology))
+		}
+		if comp.Description != "" {
+			md.WriteString(fmt.Sprintf("- **Description:** %s\n", comp.Description))
+		}
+		md.WriteString(fmt.Sprintf("- **Requirements:** %d Scopes, %d User Stories, %d Tech Specs\n",
+			comp.ScopeCount, comp.UserStoryCount, comp.TechSpecCount))
+		md.WriteString(fmt.Sprintf("- **Test Cases:** %d\n\n", comp.TestCaseCount))
+	}
+
+	// Requirements
+	md.WriteString("## 📋 Requirements Hierarchy\n\n")
+	for _, req := range requirements {
+		s.writeRequirementToMarkdown(&md, req, 3)
+	}
+
+	// Footer
+	md.WriteString("\n---\n")
+	md.WriteString("*Generated by TraceVibe RTM Export*\n")
+
+	return md.String()
+}
+
+// Helper function to write requirements recursively to markdown
+func (s *Server) writeRequirementToMarkdown(md *strings.Builder, req RequirementTree, level int) {
+	// Header with appropriate level
+	headerPrefix := strings.Repeat("#", level)
+
+	// Badge for requirement type
+	var badge string
+	switch strings.ToUpper(req.RequirementType) {
+	case "SCOPE":
+		badge = "🎯 SCOPE"
+	case "USER_STORY":
+		badge = "👤 USER STORY"
+	case "TECH_SPEC":
+		badge = "⚙️ TECH SPEC"
+	default:
+		badge = req.RequirementType
+	}
+
+	md.WriteString(fmt.Sprintf("%s %s: %s\n\n", headerPrefix, badge, req.Title))
+
+	// Metadata
+	md.WriteString(fmt.Sprintf("- **ID:** %s\n", req.RequirementKey))
+	md.WriteString(fmt.Sprintf("- **Status:** %s\n", req.Status))
+	md.WriteString(fmt.Sprintf("- **Priority:** %s\n", req.Priority))
+	md.WriteString(fmt.Sprintf("- **Category:** %s\n", req.Category))
+
+	if req.Description != "" {
+		md.WriteString(fmt.Sprintf("- **Description:** %s\n", req.Description))
+	}
+
+	// Test cases
+	if len(req.TestCases) > 0 {
+		md.WriteString("- **Test Cases:**\n")
+		for _, tc := range req.TestCases {
+			md.WriteString(fmt.Sprintf("  - %s: %s\n", tc.TestType, tc.FilePath))
+		}
+	}
+
+	// Implementation
+	if len(req.Implementation) > 0 {
+		md.WriteString("- **Implementation:**\n")
+		for _, impl := range req.Implementation {
+			md.WriteString(fmt.Sprintf("  - **%s:** %s", impl.Layer, impl.FilePath))
+			if len(impl.Functions) > 0 {
+				md.WriteString(fmt.Sprintf(" (Functions: %s)", strings.Join(impl.Functions, ", ")))
+			}
+			md.WriteString("\n")
+		}
+	}
+
+	md.WriteString("\n")
+
+	// Process children recursively
+	for _, child := range req.Children {
+		s.writeRequirementToMarkdown(md, child, level+1)
 	}
 }
 
