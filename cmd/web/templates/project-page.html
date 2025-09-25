@@ -243,6 +243,7 @@
                                                     </div>
                                                 </div>
                                                 <div class="req-actions">
+                                                    <button class="btn btn-sm" style="background-color: #8b5cf6; color: white;" onclick="event.stopPropagation(); generateLLMPrompt('{{.ID}}', '{{.Title}}', '{{.Description}}', '{{.RequirementKey}}', '{{.Status}}', '{{.Priority}}')" title="Generate LLM Implementation Prompt">🤖 LLM</button>
                                                     <button class="btn btn-sm btn-warning" onclick="event.stopPropagation(); showAddTechSpecModal('{{.ID}}', '{{.RequirementKey}}')">+ Tech Spec</button>
                                                     <button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); deleteRequirement('{{.ID}}', 'user story')">Delete</button>
                                                 </div>
@@ -426,6 +427,34 @@
             <div class="modal-footer">
                 <button class="btn" onclick="closeModal('addTechSpecModal')">Cancel</button>
                 <button class="btn btn-primary" onclick="addTechSpec()">Add Tech Spec</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- LLM Prompt Modal -->
+    <div id="llmPromptModal" class="modal">
+        <div class="modal-content" style="max-width: 800px; width: 95%;">
+            <div class="modal-header">
+                <h2 style="color: #8b5cf6;">🤖 LLM Implementation Prompt</h2>
+                <p style="color: #6b7280; font-size: 0.875rem; margin-top: 0.5rem;">Ready to copy and paste into Claude Code or any LLM</p>
+            </div>
+            <div class="modal-body">
+                <div style="position: relative;">
+                    <textarea id="llmPromptText" readonly style="width: 100%; min-height: 400px; font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; font-size: 0.875rem; line-height: 1.5; padding: 1rem; border: 2px solid #e5e7eb; border-radius: 6px; resize: vertical; background: #f9fafb;"></textarea>
+                    <button onclick="copyPromptToClipboard()" style="position: absolute; top: 10px; right: 10px; background: #8b5cf6; color: white; border: none; padding: 0.5rem; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 0.25rem; font-size: 0.75rem;" title="Copy to clipboard">
+                        <span id="copyIcon">📋</span>
+                        <span id="copyText">Copy</span>
+                    </button>
+                </div>
+                <div style="margin-top: 1rem; padding: 1rem; background: #eff6ff; border-radius: 6px; border-left: 4px solid #3b82f6;">
+                    <p style="margin: 0; font-size: 0.875rem; color: #1e40af;">
+                        <strong>💡 Tip:</strong> This prompt includes context about the project, component, and related requirements to help the LLM provide better implementation suggestions.
+                    </p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn" onclick="closeModal('llmPromptModal')">Close</button>
+                <button class="btn btn-primary" onclick="copyPromptToClipboard()" style="background: #8b5cf6;">📋 Copy Prompt</button>
             </div>
         </div>
     </div>
@@ -745,6 +774,144 @@
             const exportButton = event.target.closest('button');
             if (dropdown && !exportButton && dropdown.style.display === 'block') {
                 dropdown.style.display = 'none';
+            }
+        }
+
+        // Generate LLM Prompt functionality
+        function generateLLMPrompt(reqId, title, description, reqKey, status, priority) {
+            console.log('Generating LLM prompt for:', reqId, title);
+
+            // Get project and component context
+            const projectName = '{{.Project.Name}}';
+            const projectKey = '{{.Project.ProjectKey}}';
+            const projectDescription = '{{if .Project.Description}}{{.Project.Description}}{{else}}No description available{{end}}';
+
+            // Find the parent scope and related tech specs
+            let parentScope = '';
+            let relatedTechSpecs = [];
+            let componentName = '';
+
+            // Try to find context from the DOM
+            const userStoryElement = document.querySelector(`[data-requirement-id="${reqId}"]`);
+            if (userStoryElement) {
+                // Find parent scope
+                const parentAccordion = userStoryElement.closest('.accordion-content')?.previousElementSibling?.querySelector('.req-info .badge-info')?.parentElement?.textContent?.replace('SCOPE', '').trim();
+                if (parentAccordion) {
+                    parentScope = parentAccordion;
+                }
+
+                // Find component name
+                const componentAccordion = userStoryElement.closest('.component-content')?.previousElementSibling?.querySelector('h2')?.textContent;
+                if (componentAccordion) {
+                    componentName = componentAccordion;
+                }
+
+                // Find tech specs under this user story
+                const techSpecElements = userStoryElement.querySelectorAll('.badge-warning');
+                techSpecElements.forEach(badge => {
+                    const techSpecText = badge.parentElement.textContent.replace('TECH SPEC', '').trim();
+                    if (techSpecText) {
+                        relatedTechSpecs.push(techSpecText);
+                    }
+                });
+            }
+
+            // Clean up description (remove template artifacts)
+            let cleanDescription = description || 'No description provided';
+            cleanDescription = cleanDescription.replace(/\{\{.*?\}\}/g, '').trim();
+            if (cleanDescription === '' || cleanDescription === 'undefined') {
+                cleanDescription = 'No description provided';
+            }
+
+            // Generate the comprehensive prompt
+            let prompt = '# User Story Implementation Request\n\n';
+            prompt += '## Project Context\n';
+            prompt += '**Project:** ' + projectName + ' (' + projectKey + ')\n';
+            prompt += '**Project Description:** ' + projectDescription + '\n';
+            if (componentName) {
+                prompt += '**Component:** ' + componentName + '\n';
+            }
+            if (parentScope) {
+                prompt += '**Parent Scope:** ' + parentScope + '\n';
+            }
+            prompt += '\n## User Story Details\n';
+            prompt += '**ID:** ' + reqKey + '\n';
+            prompt += '**Title:** ' + title + '\n';
+            prompt += '**Description:** ' + cleanDescription + '\n';
+            prompt += '**Status:** ' + status + '\n';
+            prompt += '**Priority:** ' + priority + '\n\n';
+
+            if (relatedTechSpecs.length > 0) {
+                prompt += '## Related Technical Specifications\n';
+                relatedTechSpecs.forEach(spec => {
+                    prompt += '- ' + spec + '\n';
+                });
+                prompt += '\n';
+            }
+
+            prompt += '## Implementation Request\n\n';
+            prompt += 'Please help me implement this user story. I need:\n\n';
+            prompt += '1. **Code Implementation**: Provide the necessary code changes, new functions, or components needed\n';
+            prompt += '2. **Technical Approach**: Explain the implementation strategy and any architectural considerations\n';
+            prompt += '3. **Dependencies**: Identify any libraries, frameworks, or external dependencies required\n';
+            prompt += '4. **Testing Strategy**: Suggest how to test this implementation (unit tests, integration tests)\n';
+            prompt += '5. **Documentation**: Include any necessary code comments or documentation updates\n\n';
+            prompt += '## Additional Context\n\n';
+            prompt += '- This is part of a Requirements Traceability Matrix (RTM) system\n';
+            prompt += '- Please consider best practices for the technology stack being used\n';
+            prompt += '- If you need more information about the project structure or existing codebase, please ask\n';
+            prompt += '- Consider security, performance, and maintainability in your implementation\n\n';
+            prompt += '## Expected Deliverables\n\n';
+            prompt += 'Please provide:\n';
+            prompt += '- [ ] Implementation code with proper error handling\n';
+            prompt += '- [ ] Test cases or testing instructions\n';
+            prompt += '- [ ] Brief explanation of the approach taken\n';
+            prompt += '- [ ] Any assumptions made during implementation\n\n';
+            prompt += '---\n';
+            prompt += '*Generated from TraceVibe RTM - User Story: ' + reqKey + '*';
+
+            // Set the prompt in the modal and show it
+            document.getElementById('llmPromptText').value = prompt;
+            document.getElementById('llmPromptModal').classList.add('active');
+        }
+
+        // Copy prompt to clipboard functionality
+        async function copyPromptToClipboard() {
+            const promptText = document.getElementById('llmPromptText').value;
+            const copyIcon = document.getElementById('copyIcon');
+            const copyText = document.getElementById('copyText');
+
+            try {
+                await navigator.clipboard.writeText(promptText);
+
+                // Show success feedback
+                copyIcon.textContent = '✅';
+                copyText.textContent = 'Copied!';
+
+                // Reset after 2 seconds
+                setTimeout(() => {
+                    copyIcon.textContent = '📋';
+                    copyText.textContent = 'Copy';
+                }, 2000);
+
+                console.log('Prompt copied to clipboard successfully');
+            } catch (err) {
+                console.error('Failed to copy to clipboard:', err);
+
+                // Fallback: select the text for manual copying
+                document.getElementById('llmPromptText').select();
+                document.getElementById('llmPromptText').setSelectionRange(0, 99999); // For mobile devices
+
+                // Show fallback feedback
+                copyIcon.textContent = '📝';
+                copyText.textContent = 'Selected';
+
+                setTimeout(() => {
+                    copyIcon.textContent = '📋';
+                    copyText.textContent = 'Copy';
+                }, 2000);
+
+                alert('Please copy the selected text manually (Ctrl+C or Cmd+C)');
             }
         }
 
