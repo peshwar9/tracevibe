@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -61,7 +62,11 @@ func startServer(port int, dbPath string, projectBasePath string) error {
 	defer db.Close()
 
 	// Parse all templates
-	tmpl, err := template.ParseFS(templatesFS, "web/templates/*.html")
+	// Create template with custom functions
+	tmpl := template.New("").Funcs(template.FuncMap{
+		"lower": strings.ToLower,
+	})
+	tmpl, err = tmpl.ParseFS(templatesFS, "web/templates/*.html")
 	if err != nil {
 		return fmt.Errorf("failed to parse templates: %w", err)
 	}
@@ -80,6 +85,7 @@ func startServer(port int, dbPath string, projectBasePath string) error {
 	// Routes
 	http.HandleFunc("/", server.dashboardHandler)
 	http.HandleFunc("/projects/", server.projectHandler)
+	http.HandleFunc("/export/", server.exportHandler)
 	http.HandleFunc("/api/test/run", server.testRunHandler)
 	http.HandleFunc("/api/project/", server.projectAPIHandler)
 	http.HandleFunc("/api/", server.apiHandler)
@@ -283,6 +289,87 @@ func (s *Server) apiHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
+// Export handler for generating HTML reports
+func (s *Server) exportHandler(w http.ResponseWriter, r *http.Request) {
+	// Extract project key from URL path
+	path := r.URL.Path[len("/export/"):]
+	if path == "" {
+		http.Error(w, "Project key required", http.StatusBadRequest)
+		return
+	}
+
+	// Remove trailing slash and any extra path components
+	projectKey := strings.Split(path, "/")[0]
+	if projectKey == "" {
+		http.Error(w, "Project key required", http.StatusBadRequest)
+		return
+	}
+
+	// Get project data
+	project, err := s.db.GetProjectByKey(projectKey)
+	if err != nil || project == nil {
+		http.Error(w, "Project not found", http.StatusNotFound)
+		return
+	}
+
+	// Get components
+	components, err := s.getComponentsSummary(projectKey)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error loading components: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Get requirements tree
+	requirements, err := s.getRequirementsTree(projectKey, "")
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error loading requirements: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Calculate statistics
+	stats := struct {
+		TotalComponents   int
+		TotalRequirements int
+		TotalScopes      int
+		TotalUserStories int
+		TotalTechSpecs   int
+		TotalTestCases   int
+	}{}
+
+	stats.TotalComponents = len(components)
+	for _, req := range requirements {
+		countRequirementsByType(req, &stats.TotalScopes, &stats.TotalUserStories, &stats.TotalTechSpecs)
+		stats.TotalTestCases += countTestCases(req)
+	}
+	stats.TotalRequirements = stats.TotalScopes + stats.TotalUserStories + stats.TotalTechSpecs
+
+	// Prepare template data
+	data := struct {
+		Project     *database.Project
+		Components  []ComponentSummary
+		Requirements []RequirementTree
+		Stats       interface{}
+		ExportDate  string
+	}{
+		Project:     project,
+		Components:  components,
+		Requirements: requirements,
+		Stats:       stats,
+		ExportDate:  time.Now().Format("2006-01-02 15:04:05"),
+	}
+
+	// Set content type for HTML download
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s-rtm-export.html"`, projectKey))
+
+	// Render export template
+	err = s.templates.ExecuteTemplate(w, "export.html", data)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error generating export: %v", err), http.StatusInternalServerError)
+		return
+	}
+}
+
 // Test runner handler
 func (s *Server) testRunHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -410,6 +497,22 @@ func (s *Server) deleteProject(projectID string) error {
 }
 
 func (s *Server) runTestsForComponent(projectKey, componentKey string) (*TestResult, error) {
+	// First, check if the project has a Makefile with test targets - use that if available
+	if s.projectBasePath != "" {
+		makefilePath := filepath.Join(s.projectBasePath, "Makefile")
+		if _, err := os.Stat(makefilePath); err == nil {
+			// Check if Makefile has full-test target
+			if s.hasMakeTarget(makefilePath, "full-test") {
+				return s.runMakeTest(projectKey, componentKey, "full-test")
+			}
+			// Fallback to 'test' target if available
+			if s.hasMakeTarget(makefilePath, "test") {
+				return s.runMakeTest(projectKey, componentKey, "test")
+			}
+		}
+	}
+
+	// Fallback to individual test file execution
 	// Get test files for this component
 	testFiles, err := s.getTestFilesForComponent(projectKey, componentKey)
 	if err != nil {
@@ -610,6 +713,11 @@ func (s *Server) runTestFile(testFile, projectBasePath string) (bool, string, er
 	if workingDir != "" {
 		cmd.Dir = workingDir
 	}
+
+	// Inherit environment and ensure GOTOOLCHAIN is set to avoid version mismatches
+	cmd.Env = os.Environ()
+	// Set GOTOOLCHAIN to use the current Go version and handle auto-downloads
+	cmd.Env = append(cmd.Env, "GOTOOLCHAIN=go1.25.1+auto")
 
 	output, err := cmd.CombinedOutput()
 	outputStr := string(output)
@@ -1106,4 +1214,114 @@ func countTestCases(req RequirementTree) int {
 		count += countTestCases(child)
 	}
 	return count
+}
+
+// hasMakeTarget checks if a Makefile contains a specific target
+func (s *Server) hasMakeTarget(makefilePath, target string) bool {
+	content, err := os.ReadFile(makefilePath)
+	if err != nil {
+		return false
+	}
+
+	lines := strings.Split(string(content), "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		// Look for target: pattern (allowing for dependencies)
+		if strings.HasPrefix(line, target+":") {
+			return true
+		}
+	}
+	return false
+}
+
+// runMakeTest executes a make target for testing
+func (s *Server) runMakeTest(projectKey, componentKey, target string) (*TestResult, error) {
+	startTime := time.Now()
+
+	// Execute make command in the project directory
+	cmd := exec.Command("make", target)
+	cmd.Dir = s.projectBasePath
+
+	// Inherit environment and ensure GOTOOLCHAIN is set to avoid version mismatches
+	cmd.Env = os.Environ()
+	// Set GOTOOLCHAIN to use the current Go version and handle auto-downloads
+	cmd.Env = append(cmd.Env, "GOTOOLCHAIN=go1.25.1+auto")
+
+	output, err := cmd.CombinedOutput()
+	outputStr := string(output)
+
+	// Add command info to output
+	cmdInfo := fmt.Sprintf("Command: make %s\nWorking Dir: %s\n\n", target, s.projectBasePath)
+	outputStr = cmdInfo + outputStr
+
+	duration := time.Since(startTime)
+
+	// Parse make output to determine pass/fail counts
+	passed := 0
+	failed := 0
+
+	if err != nil {
+		// Make failed - parse output for test results if available
+		passed, failed = s.parseMakeTestOutput(outputStr)
+		if passed == 0 && failed == 0 {
+			failed = 1 // At least one failure if make command failed
+		}
+	} else {
+		// Make succeeded - parse output for test results
+		passed, failed = s.parseMakeTestOutput(outputStr)
+		if passed == 0 && failed == 0 {
+			passed = 1 // At least one success if make succeeded
+		}
+	}
+
+	return &TestResult{
+		Passed:   passed,
+		Failed:   failed,
+		Duration: duration.Round(time.Millisecond).String(),
+		Output:   outputStr,
+	}, nil
+}
+
+// parseMakeTestOutput extracts test counts from make output
+func (s *Server) parseMakeTestOutput(output string) (passed, failed int) {
+	lines := strings.Split(output, "\n")
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+
+		// Look for Go test result patterns
+		if strings.Contains(line, "PASS") && (strings.Contains(line, "ok") || strings.Contains(line, "github.com")) {
+			passed++
+		}
+		if strings.Contains(line, "FAIL") && (strings.Contains(line, "github.com") || strings.Contains(line, "FAIL\t")) {
+			failed++
+		}
+
+		// Look for other test result patterns
+		if strings.Contains(line, "✓") || strings.Contains(line, "passed") {
+			// Try to extract number if present
+			if parts := strings.Fields(line); len(parts) > 0 {
+				for _, part := range parts {
+					if num, err := strconv.Atoi(part); err == nil && num > 0 && strings.Contains(line, "pass") {
+						passed += num
+						break
+					}
+				}
+			}
+		}
+
+		if strings.Contains(line, "✗") || strings.Contains(line, "failed") {
+			// Try to extract number if present
+			if parts := strings.Fields(line); len(parts) > 0 {
+				for _, part := range parts {
+					if num, err := strconv.Atoi(part); err == nil && num > 0 && strings.Contains(line, "fail") {
+						failed += num
+						break
+					}
+				}
+			}
+		}
+	}
+
+	return passed, failed
 }
