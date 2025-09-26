@@ -1,222 +1,102 @@
-# TraceVibe - Standalone Requirements Traceability CLI
+# TraceVibe
 
-TraceVibe is a lightweight, standalone CLI tool for managing Requirements Traceability Matrix (RTM) data. It uses SQLite for storage and provides an embedded web UI for visualization.
+TraceVibe helps you create and manage Requirements Traceability Matrix (RTM) for projects with AI-generated code.
 
 ## Features
 
-- **LLM-First Workflow**: Generate guidelines for LLMs to analyze codebases and create RTM data
-- **SQLite Database**: Self-contained, no external database required
-- **Embedded Web UI**: Built-in HTML templates, no separate frontend stack
+- **AI-First Workflow**: Generate RTM documentation from existing codebases using LLMs
+- **Component-Based Organization**: Track requirements by system components with tags
 - **Hierarchical Requirements**: Scope → User Stories → Tech Specs structure
-- **Component-Based Organization**: Track requirements by deployable components
-- **Test Mapping**: System tests → Scope, Acceptance tests → User Stories, Unit tests → Tech Specs
+- **Web UI**: Built-in interface for viewing and managing RTM data
+- **Self-Contained**: SQLite database, no external dependencies
 
-## Installation
+## Installation & Usage
+
+### Option 1: Docker (Recommended)
 
 ```bash
-# Build from source
+# Clone and build
+git clone <your-repo-url>
+cd tracevibe
+docker build -t tracevibe:latest .
+
+# Run with persistent data
+docker run -p 8080:8080 -v tracevibe-data:/app/data tracevibe:latest
+
+# Run in background
+docker run -d --name tracevibe -p 8080:8080 -v tracevibe-data:/app/data --restart unless-stopped tracevibe:latest
+```
+
+### Option 2: Build from Source
+
+```bash
+# Prerequisites: Go 1.24+
+git clone <your-repo-url>
+cd tracevibe
 go build -o tracevibe
 
-# Or install globally
-go install github.com/peshwar9/tracevibe@latest
+# Run the server
+./tracevibe serve --port 8080
 ```
 
-## Usage
+## How to Use TraceVibe
 
-### 1. Generate RTM Guidelines
+There are three ways to get started:
 
-Generate guidelines document for LLM-assisted RTM creation:
+### 1. Create a New Project from Scratch
+Start with a blank project and manually add components, requirements, and test cases through the UI.
+
+### 2. Import an Existing Project
+Import a project that was previously exported from TraceVibe (YAML or JSON format).
+
+### 3. Reverse Engineer Existing Codebase
+For existing codebases, use AI to generate RTM documentation:
+
+1. **Generate guidelines**: `tracevibe guidelines`
+2. Use the generated `rtm-guidelines.md` and prompt with any LLM
+3. Provide the LLM with your repository link and the guidelines
+4. Ask the LLM to analyze your code and generate TraceVibe-compatible YAML/JSON
+5. Import the generated file using the web UI or CLI: `tracevibe import your-rtm.yaml --project your-project`
+
+## CLI Commands
 
 ```bash
-tracevibe guidelines -o rtm-guidelines.md
-```
+# Generate RTM guidelines for LLMs
+tracevibe guidelines
 
-### 2. Create RTM Data with LLM
-
-Provide the guidelines and your codebase to an LLM (Claude, GPT-4, etc.) with this prompt:
-
-```
-Please analyze my codebase and create an RTM JSON/YAML file following the guidelines in rtm-guidelines.md.
-
-Project: [your-project-name]
-Repository: [path-to-code]
-Tech Stack: [languages/frameworks]
-```
-
-### 3. Import RTM Data
-
-Import the LLM-generated RTM file:
-
-```bash
+# Import RTM data
 tracevibe import project-rtm.json --project myproject
 
-# Or specify custom database path
-tracevibe import project-rtm.yaml --project myproject --db-path ./custom.db
+# Start web server
+tracevibe serve --port 8080
+
+# Custom database location
+tracevibe serve --db-path ./custom.db
 ```
 
-### 4. View in Web UI
+## Web Interface
 
-Start the embedded web server:
+Access the web UI at `http://localhost:8080` to:
+- View project dashboard with statistics
+- Browse components and their requirements
+- Filter components by tags
+- Export projects in multiple formats
+- Import/create new projects
 
-```bash
-tracevibe serve
-
-# Or specify custom port
-tracevibe serve --port 8081
-```
-
-Open browser to `http://localhost:8080` (or your specified port)
-
-## RTM Data Structure
-
-### Hierarchical Requirements
+## RTM Structure
 
 ```
 Component (backend-api, frontend-app, database)
   └── Scope (high-level functionality)
       └── User Stories (user journeys)
-          └── Tech Specs (detailed requirements)
+          └── Tech Specs (detailed implementation requirements)
 ```
 
-### Example RTM JSON
+## Database Storage
 
-```json
-{
-  "project": {
-    "id": "myproject",
-    "name": "My Project",
-    "description": "Project description"
-  },
-  "system_components": [
-    {
-      "id": "backend-api",
-      "name": "Backend API Server",
-      "component_type": "api_server",
-      "technology": "Go"
-    }
-  ],
-  "requirements": [
-    {
-      "id": "SCOPE-API-1",
-      "component_id": "backend-api",
-      "requirement_type": "scope",
-      "title": "User Authentication",
-      "category": "backend_api",
-      "children": [
-        {
-          "id": "STORY-API-1.1",
-          "requirement_type": "user_story",
-          "title": "User Registration",
-          "children": [
-            {
-              "id": "SPEC-API-1.1.1",
-              "requirement_type": "tech_spec",
-              "title": "Email validation",
-              "implementation": {
-                "backend": {
-                  "files": [
-                    {
-                      "path": "internal/auth/register.go",
-                      "functions": ["ValidateEmail"]
-                    }
-                  ]
-                }
-              },
-              "tests": {
-                "backend": [
-                  {
-                    "file": "internal/auth/register_test.go",
-                    "functions": ["TestValidateEmail"]
-                  }
-                ]
-              }
-            }
-          ]
-        }
-      ]
-    }
-  ]
-}
-```
-
-## Database Location
-
-By default, TraceVibe stores its SQLite database at:
-- macOS/Linux: `~/.tracevibe/tracevibe.db`
-- Windows: `%USERPROFILE%\.tracevibe\tracevibe.db`
-
-## Web UI Features
-
-- **Dashboard**: Overview of all imported projects
-- **Project View**: Component list and requirements hierarchy
-- **Component Details**: Deep dive into component requirements
-- **Requirements Tree**: Interactive expandable tree structure
-- **Implementation Tracking**: View source files implementing each requirement
-- **Test Coverage**: See test cases mapped to requirements
-
-## Architecture
-
-TraceVibe is built with:
-- **Go**: Core CLI application
-- **Cobra**: Command-line interface framework
-- **SQLite**: Embedded database (via go-sqlite3)
-- **HTML Templates**: Go's html/template for UI
-- **Embedded Assets**: Templates embedded in binary using embed.FS
-
-## Development
-
-### Prerequisites
-- Go 1.21+
-- SQLite3 (comes with go-sqlite3)
-
-### Building from Source
-
-```bash
-git clone https://github.com/peshwar9/tracevibe.git
-cd tracevibe
-go mod download
-go build -o tracevibe
-```
-
-### Project Structure
-
-```
-tracevibe/
-├── main.go                 # Entry point
-├── cmd/                    # Cobra commands
-│   ├── root.go
-│   ├── guidelines.go       # Generate guidelines
-│   ├── import.go          # Import RTM data
-│   ├── serve.go           # Web server
-│   └── web/templates/     # HTML templates
-├── internal/
-│   ├── database/          # SQLite operations
-│   │   └── schema.sql     # Database schema
-│   ├── models/            # Data structures
-│   └── importer/          # Import logic
-└── schema.sql             # SQLite schema
-```
-
-## Comparison with PostgreSQL Version
-
-The original RTM system used:
-- PostgreSQL database
-- Next.js/React frontend
-- Separate deployment requirements
-
-TraceVibe provides:
-- SQLite (embedded, no setup)
-- Go HTML templates (single binary)
-- Zero-dependency deployment
-
-## Future Enhancements
-
-- [ ] Git integration for branch-aware testing
-- [ ] Test execution from UI
-- [ ] Requirement editing in UI
-- [ ] Export to various formats (PDF, Markdown)
-- [ ] Multi-project comparison views
-- [ ] Automated RTM updates via CI/CD
+TraceVibe stores data in SQLite:
+- **Docker**: `/app/data/tracevibe.db` (mounted volume)
+- **Source**: `~/.tracevibe/tracevibe.db` (macOS/Linux) or `%USERPROFILE%\.tracevibe\tracevibe.db` (Windows)
 
 ## License
 
