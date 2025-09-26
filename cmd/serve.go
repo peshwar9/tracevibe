@@ -254,7 +254,6 @@ func (s *Server) projectOverviewHandler(w http.ResponseWriter, r *http.Request, 
 	if err != nil {
 		data.Error = fmt.Sprintf("Error loading requirements: %v", err)
 	} else {
-		fmt.Printf("DEBUG: Project page loaded %d requirements for project %s\n", len(requirements), projectKey)
 		data.Requirements = requirements
 	}
 
@@ -583,7 +582,6 @@ func (s *Server) getExportDataAsRTM(r *http.Request) (string, *models.RTMData, e
 	if err != nil {
 		return "", nil, fmt.Errorf("error loading requirements: %v", err)
 	}
-	fmt.Printf("DEBUG: Found %d requirements for project ID %s\n", len(requirements), project.ID)
 
 	// Get all components using existing method
 	componentSummaries, err := s.getComponentsSummary(projectKey)
@@ -637,7 +635,6 @@ func (s *Server) getExportDataAsRTM(r *http.Request) (string, *models.RTMData, e
 
 	// First pass: create all scopes (store pointers, not copies)
 	for _, req := range requirements {
-		fmt.Printf("DEBUG: Processing requirement %s of type %s\n", req.RequirementKey, req.RequirementType)
 		if strings.ToLower(req.RequirementType) == "scope" {
 			scope := models.Scope{
 				ID:          req.RequirementKey,
@@ -1681,12 +1678,9 @@ func (s *Server) getRequirementsTree(projectKey, componentKey string) ([]Require
 		%s
 		ORDER BY r.requirement_key`, whereClause)
 
-	fmt.Printf("DEBUG: getRequirementsTree query: %s\n", query)
-	fmt.Printf("DEBUG: getRequirementsTree args: %v\n", args)
 
 	rows, err := s.db.Query(query, args...)
 	if err != nil {
-		fmt.Printf("DEBUG: Error executing getRequirementsTree query: %v\n", err)
 		return nil, err
 	}
 	defer rows.Close()
@@ -1701,8 +1695,6 @@ func (s *Server) getRequirementsTree(projectKey, componentKey string) ([]Require
 		if err != nil {
 			return nil, err
 		}
-		fmt.Printf("DEBUG: Retrieved requirement: ID=%s, Key=%s, Type=%s, Title='%s', Category=%s, Status=%s\n",
-			req.ID, req.RequirementKey, req.RequirementType, req.Title, req.Category, req.Status)
 
 		// Get children recursively (simplified for now)
 		children, err := s.getChildRequirements(req.ID)
@@ -1728,7 +1720,6 @@ func (s *Server) getRequirementsTree(projectKey, componentKey string) ([]Require
 		requirements = append(requirements, req)
 	}
 
-	fmt.Printf("DEBUG: getRequirementsTree found %d rows, returning %d requirements\n", rowCount, len(requirements))
 	return requirements, nil
 }
 
@@ -2349,8 +2340,6 @@ func (s *Server) createRequirementHandler(w http.ResponseWriter, r *http.Request
 		http.Error(w, fmt.Sprintf("Invalid request body: %v", err), http.StatusBadRequest)
 		return
 	}
-	fmt.Printf("DEBUG: Creating requirement - ProjectID: %s, ComponentID: %s, Type: %s, Title: %s\n",
-		req.ProjectID, req.ComponentID, req.RequirementType, req.Title)
 
 	// Generate requirement key if not provided
 	if req.RequirementKey == "" {
@@ -2370,13 +2359,10 @@ func (s *Server) createRequirementHandler(w http.ResponseWriter, r *http.Request
 		req.Status = "not_started"
 	}
 
-	fmt.Printf("DEBUG: About to call s.db.CreateRequirement with key: %s\n", req.RequirementKey)
 	if err := s.db.CreateRequirement(&req); err != nil {
-		fmt.Printf("DEBUG: Error creating requirement: %v\n", err)
 		http.Error(w, fmt.Sprintf("Error creating requirement: %v", err), http.StatusInternalServerError)
 		return
 	}
-	fmt.Printf("DEBUG: Successfully created requirement with ID: %s, Key: %s\n", req.ID, req.RequirementKey)
 
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success": true,
