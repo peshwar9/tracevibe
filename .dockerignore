@@ -1,0 +1,44 @@
+# Ignore build artifacts
+tracevibe
+tracevibe-*
+dist/
+*.exe
+
+# Ignore version control
+.git/
+.github/
+
+# Ignore OS specific files
+.DS_Store
+Thumbs.db
+
+# Ignore test data and development files
+test-data/
+*.test
+*.prof
+
+# Ignore documentation that's not needed in the container
+README.md
+INSTALL.md
+MIGRATION.md
+STANDALONE_DESIGN.md
+rtm-guidelines.md
+
+# Ignore development scripts
+install.sh
+test-release.sh
+
+# Ignore local database files
+*.db
+*.db-shm
+*.db-wal
+
+# Ignore IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Ignore temporary files
+*.tmp
+*.log
