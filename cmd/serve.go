@@ -2060,8 +2060,6 @@ func (s *Server) updateComponentHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Debug logging
-	log.Printf("Update component request: ID=%s, Name=%s, Tags=%v", data.ID, data.Name, data.Tags)
 
 	// Validate required fields
 	if data.ID == "" || data.Name == "" || data.ComponentType == "" {
@@ -2089,7 +2087,6 @@ func (s *Server) updateComponentHandler(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, fmt.Sprintf("Error checking table structure: %v", err), http.StatusInternalServerError)
 		return
 	}
-	log.Printf("Tag column check result: tagCount=%d", tagCount)
 
 	var query string
 	var args []interface{}
@@ -2102,11 +2099,6 @@ func (s *Server) updateComponentHandler(w http.ResponseWriter, r *http.Request) 
 			WHERE id = ?
 		`
 		args = []interface{}{data.Name, data.ComponentType, data.Technology, data.Description, tagsJSON, data.ID}
-		if tagsJSON != nil {
-			log.Printf("Executing query with tags: %s, args: %v, tagsJSON: %s", query, args, *tagsJSON)
-		} else {
-			log.Printf("Executing query with tags: %s, args: %v, tagsJSON: nil", query, args)
-		}
 	} else {
 		// Tags column doesn't exist, exclude it from update
 		query = `
@@ -2115,7 +2107,6 @@ func (s *Server) updateComponentHandler(w http.ResponseWriter, r *http.Request) 
 			WHERE id = ?
 		`
 		args = []interface{}{data.Name, data.ComponentType, data.Technology, data.Description, data.ID}
-		log.Printf("Executing query without tags: %s, args: %v", query, args)
 	}
 
 	result, err := s.db.Exec(query, args...)
