@@ -171,6 +171,9 @@
                     <div id="tagFilters" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
                         <!-- Tags will be populated by JavaScript -->
                     </div>
+                    <span id="componentCounter" style="color: #6b7280; font-size: 0.875rem; font-weight: 500;">
+                        <!-- Component count will be updated by JavaScript -->
+                    </span>
                     <button class="btn btn-sm" onclick="clearTagFilters()" style="background-color: #6b7280; color: white;">Clear All</button>
                 </div>
             </div>
@@ -1156,6 +1159,9 @@
                     tagFiltersContainer.appendChild(tagButton);
                 });
             }
+
+            // Initialize component counter
+            updateComponentCounter(components.length, components.length);
         }
 
         function toggleTagFilter(tag) {
@@ -1202,25 +1208,44 @@
 
         function filterComponents() {
             const components = document.querySelectorAll('.component-accordion');
+            let visibleCount = 0;
 
             if (selectedTags.size === 0) {
                 // Show all components if no tags selected
                 components.forEach(component => {
                     component.style.display = 'block';
+                    visibleCount++;
                 });
-                return;
+            } else {
+                components.forEach(component => {
+                    const tagsAttr = component.getAttribute('data-component-tags');
+                    if (tagsAttr) {
+                        const componentTags = tagsAttr.split(',').map(tag => tag.trim()).filter(tag => tag);
+                        const hasSelectedTag = componentTags.some(tag => selectedTags.has(tag));
+                        if (hasSelectedTag) {
+                            component.style.display = 'block';
+                            visibleCount++;
+                        } else {
+                            component.style.display = 'none';
+                        }
+                    } else {
+                        component.style.display = 'none';
+                    }
+                });
             }
 
-            components.forEach(component => {
-                const tagsAttr = component.getAttribute('data-component-tags');
-                if (tagsAttr) {
-                    const componentTags = tagsAttr.split(',').map(tag => tag.trim()).filter(tag => tag);
-                    const hasSelectedTag = componentTags.some(tag => selectedTags.has(tag));
-                    component.style.display = hasSelectedTag ? 'block' : 'none';
+            updateComponentCounter(visibleCount, components.length);
+        }
+
+        function updateComponentCounter(visible, total) {
+            const counter = document.getElementById('componentCounter');
+            if (counter) {
+                if (selectedTags.size === 0) {
+                    counter.textContent = `${total} components`;
                 } else {
-                    component.style.display = 'none';
+                    counter.textContent = `${visible} of ${total} components`;
                 }
-            });
+            }
         }
 
         function clearTagFilters() {
