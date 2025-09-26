@@ -38,6 +38,7 @@ CREATE TABLE system_components (
     component_type TEXT NOT NULL, -- 'api_server', 'frontend', 'database', 'cli_tool'
     technology TEXT, -- 'Go', 'React', 'PostgreSQL'
     description TEXT,
+    tags TEXT, -- JSON array of tags like '["data-ingestion", "exchange", "go"]'
     created_at TEXT DEFAULT (datetime('now')),
     UNIQUE(project_id, component_key)
 );

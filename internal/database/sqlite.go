@@ -70,10 +70,16 @@ func (db *DB) InitSchema() error {
 	// Check if tables already exist
 	var count int
 	err := db.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='projects'").Scan(&count)
+	fmt.Printf("Projects table count: %d, error: %v\n", count, err)
+
 	if err == nil && count > 0 {
-		// Tables already exist, skip initialization
+		// Tables already exist, run migrations
+		fmt.Println("Tables exist, running migrations...")
+		db.runMigrations()
 		return nil
 	}
+
+	fmt.Println("Creating new database schema...")
 
 	schema, err := schemaFS.ReadFile("schema.sql")
 	if err != nil {
@@ -85,6 +91,34 @@ func (db *DB) InitSchema() error {
 	}
 
 	return nil
+}
+
+// runMigrations adds any missing columns to existing databases
+func (db *DB) runMigrations() {
+	fmt.Println("Running database migrations...")
+
+	// Check if tags column exists in system_components
+	var tagCount int
+	err := db.QueryRow("SELECT COUNT(*) FROM pragma_table_info('system_components') WHERE name='tags'").Scan(&tagCount)
+	if err != nil {
+		fmt.Printf("Error checking tags column: %v\n", err)
+		return
+	}
+
+	fmt.Printf("Tags column count: %d\n", tagCount)
+
+	if tagCount == 0 {
+		// Tags column doesn't exist, add it
+		fmt.Println("Adding tags column to system_components table...")
+		_, err := db.Exec("ALTER TABLE system_components ADD COLUMN tags TEXT")
+		if err != nil {
+			fmt.Printf("Error adding tags column: %v\n", err)
+		} else {
+			fmt.Println("Tags column added successfully!")
+		}
+	} else {
+		fmt.Println("Tags column already exists")
+	}
 }
 
 func (db *DB) GetProjectByKey(projectKey string) (*Project, error) {

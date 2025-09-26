@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -63,6 +64,11 @@ func startServer(port int, dbPath string, projectBasePath string) error {
 	}
 	defer db.Close()
 
+	// Initialize database schema and run migrations
+	if err := db.InitSchema(); err != nil {
+		return fmt.Errorf("failed to initialize database schema: %w", err)
+	}
+
 	// Parse all templates
 	// Create template with custom functions
 	tmpl := template.New("").Funcs(template.FuncMap{
@@ -95,6 +101,7 @@ func startServer(port int, dbPath string, projectBasePath string) error {
 	http.HandleFunc("/api/project/", server.projectAPIHandler)
 	http.HandleFunc("/api/projects/create", server.createProjectHandler)
 	http.HandleFunc("/api/components", server.componentsAPIHandler)
+	http.HandleFunc("/api/components/update", server.updateComponentHandler)
 	http.HandleFunc("/api/requirements/", server.requirementsAPIHandler)
 	http.HandleFunc("/api/", server.apiHandler)
 
@@ -1384,6 +1391,7 @@ type ComponentSummary struct {
 	ComponentType    string   `json:"component_type"`
 	Technology       string   `json:"technology"`
 	Description      string   `json:"description"`
+	Tags             []string `json:"tags"`
 	TotalRequirements int     `json:"total_requirements"`
 	ScopeCount       int      `json:"scope_count"`
 	UserStoryCount   int      `json:"user_story_count"`
@@ -1526,17 +1534,42 @@ func (s *Server) getProjectsSummary() ([]ProjectSummary, error) {
 }
 
 func (s *Server) getComponentsSummary(projectKey string) ([]ComponentSummary, error) {
-	query := `
-		SELECT c.id, c.component_key, c.name, c.component_type,
-			   COALESCE(c.technology, '') as technology, COALESCE(c.description, '') as description,
-			   COALESCE(cs.total_requirements, 0), COALESCE(cs.scope_count, 0),
-			   COALESCE(cs.user_story_count, 0), COALESCE(cs.tech_spec_count, 0),
-			   COALESCE(cs.implementation_count, 0), COALESCE(cs.test_case_count, 0)
-		FROM system_components c
-		JOIN projects p ON c.project_id = p.id
-		LEFT JOIN component_summary cs ON c.id = cs.id
-		WHERE p.project_key = ?
-		ORDER BY c.name`
+	// First check if tags column exists
+	var tagCount int
+	err := s.db.QueryRow("SELECT COUNT(*) FROM pragma_table_info('system_components') WHERE name='tags'").Scan(&tagCount)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check table structure: %w", err)
+	}
+
+	var query string
+	if tagCount > 0 {
+		// Tags column exists, include it in the query
+		query = `
+			SELECT c.id, c.component_key, c.name, c.component_type,
+				   COALESCE(c.technology, '') as technology, COALESCE(c.description, '') as description,
+				   COALESCE(c.tags, '[]') as tags,
+				   COALESCE(cs.total_requirements, 0), COALESCE(cs.scope_count, 0),
+				   COALESCE(cs.user_story_count, 0), COALESCE(cs.tech_spec_count, 0),
+				   COALESCE(cs.implementation_count, 0), COALESCE(cs.test_case_count, 0)
+			FROM system_components c
+			JOIN projects p ON c.project_id = p.id
+			LEFT JOIN component_summary cs ON c.id = cs.id
+			WHERE p.project_key = ?
+			ORDER BY c.name`
+	} else {
+		// Tags column doesn't exist, exclude it from query
+		query = `
+			SELECT c.id, c.component_key, c.name, c.component_type,
+				   COALESCE(c.technology, '') as technology, COALESCE(c.description, '') as description,
+				   COALESCE(cs.total_requirements, 0), COALESCE(cs.scope_count, 0),
+				   COALESCE(cs.user_story_count, 0), COALESCE(cs.tech_spec_count, 0),
+				   COALESCE(cs.implementation_count, 0), COALESCE(cs.test_case_count, 0)
+			FROM system_components c
+			JOIN projects p ON c.project_id = p.id
+			LEFT JOIN component_summary cs ON c.id = cs.id
+			WHERE p.project_key = ?
+			ORDER BY c.name`
+	}
 
 	rows, err := s.db.Query(query, projectKey)
 	if err != nil {
@@ -1547,11 +1580,30 @@ func (s *Server) getComponentsSummary(projectKey string) ([]ComponentSummary, er
 	var components []ComponentSummary
 	for rows.Next() {
 		var c ComponentSummary
-		err := rows.Scan(&c.ID, &c.ComponentKey, &c.Name, &c.ComponentType,
-			&c.Technology, &c.Description, &c.TotalRequirements, &c.ScopeCount,
-			&c.UserStoryCount, &c.TechSpecCount, &c.ImplementationCount, &c.TestCaseCount)
-		if err != nil {
-			return nil, err
+		var tagsJSON string
+
+		if tagCount > 0 {
+			// Scan with tags column
+			err := rows.Scan(&c.ID, &c.ComponentKey, &c.Name, &c.ComponentType,
+				&c.Technology, &c.Description, &tagsJSON, &c.TotalRequirements, &c.ScopeCount,
+				&c.UserStoryCount, &c.TechSpecCount, &c.ImplementationCount, &c.TestCaseCount)
+			if err != nil {
+				return nil, err
+			}
+
+			// Parse tags JSON
+			if tagsJSON != "" && tagsJSON != "[]" {
+				json.Unmarshal([]byte(tagsJSON), &c.Tags)
+			}
+		} else {
+			// Scan without tags column
+			err := rows.Scan(&c.ID, &c.ComponentKey, &c.Name, &c.ComponentType,
+				&c.Technology, &c.Description, &c.TotalRequirements, &c.ScopeCount,
+				&c.UserStoryCount, &c.TechSpecCount, &c.ImplementationCount, &c.TestCaseCount)
+			if err != nil {
+				return nil, err
+			}
+			// Tags will remain empty slice (initialized by struct)
 		}
 
 		// Get scope IDs for this component
@@ -1923,12 +1975,13 @@ func (s *Server) componentsAPIHandler(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) createComponentHandler(w http.ResponseWriter, r *http.Request) {
 	var data struct {
-		ProjectID      string  `json:"project_id"`
-		ComponentKey   string  `json:"component_key"`
-		Name           string  `json:"name"`
-		ComponentType  string  `json:"component_type"`
-		Technology     *string `json:"technology"`
-		Description    *string `json:"description"`
+		ProjectID      string   `json:"project_id"`
+		ComponentKey   string   `json:"component_key"`
+		Name           string   `json:"name"`
+		ComponentType  string   `json:"component_type"`
+		Technology     *string  `json:"technology"`
+		Description    *string  `json:"description"`
+		Tags           []string `json:"tags"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
@@ -1942,13 +1995,25 @@ func (s *Server) createComponentHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// Convert tags array to JSON string
+	var tagsJSON *string
+	if len(data.Tags) > 0 {
+		tagsBytes, err := json.Marshal(data.Tags)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Error processing tags: %v", err), http.StatusInternalServerError)
+			return
+		}
+		tagsStr := string(tagsBytes)
+		tagsJSON = &tagsStr
+	}
+
 	// Create the component in the database
 	query := `
-		INSERT INTO system_components (project_id, component_key, name, component_type, technology, description)
-		VALUES (?, ?, ?, ?, ?, ?)
+		INSERT INTO system_components (project_id, component_key, name, component_type, technology, description, tags)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
 	`
 
-	result, err := s.db.Exec(query, data.ProjectID, data.ComponentKey, data.Name, data.ComponentType, data.Technology, data.Description)
+	result, err := s.db.Exec(query, data.ProjectID, data.ComponentKey, data.Name, data.ComponentType, data.Technology, data.Description, tagsJSON)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Error creating component: %v", err), http.StatusInternalServerError)
 		return
@@ -1967,6 +2032,115 @@ func (s *Server) createComponentHandler(w http.ResponseWriter, r *http.Request) 
 		"id":            componentID,
 		"component_key": data.ComponentKey,
 		"name":          data.Name,
+	}
+
+	json.NewEncoder(w).Encode(response)
+}
+
+// Component update handler
+func (s *Server) updateComponentHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	if r.Method != "PUT" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var data struct {
+		ID            string   `json:"id"`
+		Name          string   `json:"name"`
+		ComponentType string   `json:"component_type"`
+		Technology    *string  `json:"technology"`
+		Description   *string  `json:"description"`
+		Tags          []string `json:"tags"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+		http.Error(w, fmt.Sprintf("Invalid request body: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	// Debug logging
+	log.Printf("Update component request: ID=%s, Name=%s, Tags=%v", data.ID, data.Name, data.Tags)
+
+	// Validate required fields
+	if data.ID == "" || data.Name == "" || data.ComponentType == "" {
+		http.Error(w, "Missing required fields: id, name, component_type", http.StatusBadRequest)
+		return
+	}
+
+	// Convert tags array to JSON string
+	var tagsJSON *string
+	if len(data.Tags) > 0 {
+		tagsBytes, err := json.Marshal(data.Tags)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Error processing tags: %v", err), http.StatusInternalServerError)
+			return
+		}
+		tagsStr := string(tagsBytes)
+		tagsJSON = &tagsStr
+	}
+
+	// First check if tags column exists
+	var tagCount int
+	err := s.db.QueryRow("SELECT COUNT(*) FROM pragma_table_info('system_components') WHERE name='tags'").Scan(&tagCount)
+	if err != nil {
+		log.Printf("Error checking table structure: %v", err)
+		http.Error(w, fmt.Sprintf("Error checking table structure: %v", err), http.StatusInternalServerError)
+		return
+	}
+	log.Printf("Tag column check result: tagCount=%d", tagCount)
+
+	var query string
+	var args []interface{}
+
+	if tagCount > 0 {
+		// Tags column exists, include it in the update
+		query = `
+			UPDATE system_components
+			SET name = ?, component_type = ?, technology = ?, description = ?, tags = ?
+			WHERE id = ?
+		`
+		args = []interface{}{data.Name, data.ComponentType, data.Technology, data.Description, tagsJSON, data.ID}
+		if tagsJSON != nil {
+			log.Printf("Executing query with tags: %s, args: %v, tagsJSON: %s", query, args, *tagsJSON)
+		} else {
+			log.Printf("Executing query with tags: %s, args: %v, tagsJSON: nil", query, args)
+		}
+	} else {
+		// Tags column doesn't exist, exclude it from update
+		query = `
+			UPDATE system_components
+			SET name = ?, component_type = ?, technology = ?, description = ?
+			WHERE id = ?
+		`
+		args = []interface{}{data.Name, data.ComponentType, data.Technology, data.Description, data.ID}
+		log.Printf("Executing query without tags: %s, args: %v", query, args)
+	}
+
+	result, err := s.db.Exec(query, args...)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error updating component: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Check if any rows were affected
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error checking update result: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	if rowsAffected == 0 {
+		http.Error(w, "Component not found", http.StatusNotFound)
+		return
+	}
+
+	// Return success response
+	response := map[string]interface{}{
+		"success": true,
+		"id":      data.ID,
+		"name":    data.Name,
 	}
 
 	json.NewEncoder(w).Encode(response)

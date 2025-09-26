@@ -162,10 +162,25 @@
         <p style="color: #6b7280; margin-bottom: 2rem;">{{if .Project.Description}}{{.Project.Description}}{{else}}No description available.{{end}}</p>
         {{end}}
 
+        <!-- Tags Filter -->
+        {{if .ComponentsWithReqs}}
+        <div class="card" style="margin-bottom: 1rem;">
+            <div class="card-content" style="padding: 1rem;">
+                <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
+                    <span style="font-weight: 600; color: #1e293b;">Filter by tags:</span>
+                    <div id="tagFilters" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                        <!-- Tags will be populated by JavaScript -->
+                    </div>
+                    <button class="btn btn-sm" onclick="clearTagFilters()" style="background-color: #6b7280; color: white;">Clear All</button>
+                </div>
+            </div>
+        </div>
+        {{end}}
+
         <!-- Components and Requirements -->
         {{if .ComponentsWithReqs}}
         {{range .ComponentsWithReqs}}
-        <div class="component-accordion">
+        <div class="component-accordion" data-component-tags="{{range $i, $tag := .Tags}}{{if $i}},{{end}}{{$tag}}{{end}}">
             <div class="component-header" onclick="toggleComponentAccordion(this)">
                 <div>
                     <h2 style="font-size: 1.5rem; font-weight: 700; color: #1e293b; margin: 0;">{{.Name}}</h2>
@@ -175,11 +190,20 @@
                     <div style="font-size: 0.875rem; color: #6b7280; margin-top: 0.25rem;">
                         Scopes: {{.ScopeCount}} | User Stories: {{.UserStoryCount}} | Tech Specs: {{.TechSpecCount}} | Test Cases: {{.TestCaseCount}}
                     </div>
+                    {{if .Tags}}
+                    <div style="font-size: 0.875rem; margin-top: 0.5rem;">
+                        <span style="color: #6b7280;">Tags:</span>
+                        {{range .Tags}}
+                        <span class="badge" style="background-color: #e0e7ff; color: #3730a3; margin-left: 0.25rem;">{{.}}</span>
+                        {{end}}
+                    </div>
+                    {{end}}
                     {{if .Description}}
                     <div style="font-size: 0.875rem; color: #6b7280; margin-top: 0.5rem;">{{.Description}}</div>
                     {{end}}
                 </div>
                 <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <button onclick="event.stopPropagation(); showEditComponentModal('{{.ID}}', '{{.Name}}', '{{.ComponentType}}', '{{.Technology}}', '{{.Description}}', '{{range $i, $tag := .Tags}}{{if $i}},{{end}}{{$tag}}{{end}}')" class="btn btn-primary">Edit</button>
                     <button onclick="event.stopPropagation(); showAddScopeModal('{{.ID}}')" class="btn btn-success">+ Add Scope</button>
                     <div class="component-toggle">+</div>
                 </div>
@@ -412,6 +436,11 @@
                     <input type="text" id="componentTechnology" class="form-control" placeholder="e.g., Node.js, React, PostgreSQL, Docker">
                 </div>
                 <div class="form-group">
+                    <label class="form-label">Tags</label>
+                    <input type="text" id="componentTags" class="form-control" placeholder="Enter tags separated by commas (e.g., data-ingestion, exchange, go)">
+                    <small style="color: #6b7280; font-size: 0.75rem;">Suggested: data-ingestion, processing, storage, api-layer, frontend, infrastructure</small>
+                </div>
+                <div class="form-group">
                     <label class="form-label">Description</label>
                     <textarea id="componentDescription" class="form-control" placeholder="Describe the component's purpose and responsibilities"></textarea>
                 </div>
@@ -419,6 +448,59 @@
             <div class="modal-footer">
                 <button class="btn" onclick="closeModal('addComponentModal')">Cancel</button>
                 <button class="btn btn-primary" onclick="addComponent()">Add Component</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Component Modal -->
+    <div id="editComponentModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Edit Component</h2>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Component Name *</label>
+                    <input type="text" id="editComponentName" class="form-control" placeholder="Enter component name">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Component Type *</label>
+                    <select id="editComponentType" class="form-control">
+                        <option value="">Select component type</option>
+                        <option value="backend_service">Backend Service</option>
+                        <option value="frontend_app">Frontend Application</option>
+                        <option value="database">Database</option>
+                        <option value="api_gateway">API Gateway</option>
+                        <option value="message_queue">Message Queue</option>
+                        <option value="cache">Cache/Redis</option>
+                        <option value="load_balancer">Load Balancer</option>
+                        <option value="cdn">CDN</option>
+                        <option value="auth_service">Authentication Service</option>
+                        <option value="monitoring">Monitoring</option>
+                        <option value="logging">Logging</option>
+                        <option value="storage">File Storage</option>
+                        <option value="external_api">External API</option>
+                        <option value="microservice">Microservice</option>
+                        <option value="library">Library/Package</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Technology Stack</label>
+                    <input type="text" id="editComponentTechnology" class="form-control" placeholder="e.g., Node.js, React, PostgreSQL, Docker">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Tags</label>
+                    <input type="text" id="editComponentTags" class="form-control" placeholder="Enter tags separated by commas (e.g., data-ingestion, exchange, go)">
+                    <small style="color: #6b7280; font-size: 0.75rem;">Suggested: data-ingestion, processing, storage, api-layer, frontend, infrastructure</small>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Description</label>
+                    <textarea id="editComponentDescription" class="form-control" placeholder="Describe the component's purpose and responsibilities"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn" onclick="closeModal('editComponentModal')">Cancel</button>
+                <button class="btn btn-primary" onclick="updateComponent()">Update Component</button>
             </div>
         </div>
     </div>
@@ -542,6 +624,7 @@
             document.getElementById('componentName').value = '';
             document.getElementById('componentType').value = '';
             document.getElementById('componentTechnology').value = '';
+            document.getElementById('componentTags').value = '';
             document.getElementById('componentDescription').value = '';
         }
 
@@ -550,6 +633,7 @@
             const type = document.getElementById('componentType').value;
             const technology = document.getElementById('componentTechnology').value.trim();
             const description = document.getElementById('componentDescription').value.trim();
+            const tagsInput = document.getElementById('componentTags').value.trim();
 
             if (!name) {
                 alert('Please enter a component name');
@@ -560,13 +644,17 @@
                 return;
             }
 
+            // Parse tags from comma-separated string
+            const tags = tagsInput ? tagsInput.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0) : [];
+
             const data = {
                 project_id: projectData.projectId,
                 component_key: name.toLowerCase().replace(/[^a-z0-9]/g, '_'),
                 name: name,
                 component_type: type,
                 technology: technology || null,
-                description: description || null
+                description: description || null,
+                tags: tags
             };
 
             console.log('Creating component:', data);
@@ -1031,9 +1119,194 @@
             }
         }
 
+        // Tag filtering functionality
+        let selectedTags = new Set();
+
+        function initializeTagFilters() {
+            const tagSet = new Set();
+            const components = document.querySelectorAll('.component-accordion');
+
+            components.forEach(component => {
+                const tagsAttr = component.getAttribute('data-component-tags');
+                if (tagsAttr) {
+                    const tags = tagsAttr.split(',').map(tag => tag.trim()).filter(tag => tag);
+                    tags.forEach(tag => tagSet.add(tag));
+                }
+            });
+
+            const tagFiltersContainer = document.getElementById('tagFilters');
+            if (tagFiltersContainer && tagSet.size > 0) {
+                tagFiltersContainer.innerHTML = '';
+                Array.from(tagSet).sort().forEach(tag => {
+                    const tagButton = document.createElement('button');
+                    tagButton.className = 'tag-filter-btn';
+                    tagButton.textContent = tag;
+                    tagButton.onclick = () => toggleTagFilter(tag);
+                    tagButton.style.cssText = `
+                        padding: 0.25rem 0.75rem;
+                        border: 2px solid #d1d5db;
+                        background: white;
+                        color: #374151;
+                        border-radius: 20px;
+                        cursor: pointer;
+                        font-size: 0.875rem;
+                        font-weight: 500;
+                        transition: all 0.2s;
+                    `;
+                    tagFiltersContainer.appendChild(tagButton);
+                });
+            }
+        }
+
+        function toggleTagFilter(tag) {
+            if (selectedTags.has(tag)) {
+                selectedTags.delete(tag);
+            } else {
+                selectedTags.add(tag);
+            }
+            updateTagFilterButtons();
+            filterComponents();
+        }
+
+        function updateTagFilterButtons() {
+            const buttons = document.querySelectorAll('.tag-filter-btn');
+            buttons.forEach(button => {
+                const tag = button.textContent;
+                if (selectedTags.has(tag)) {
+                    button.style.cssText = `
+                        padding: 0.25rem 0.75rem;
+                        border: 2px solid #3b82f6;
+                        background: #3b82f6;
+                        color: white;
+                        border-radius: 20px;
+                        cursor: pointer;
+                        font-size: 0.875rem;
+                        font-weight: 500;
+                        transition: all 0.2s;
+                    `;
+                } else {
+                    button.style.cssText = `
+                        padding: 0.25rem 0.75rem;
+                        border: 2px solid #d1d5db;
+                        background: white;
+                        color: #374151;
+                        border-radius: 20px;
+                        cursor: pointer;
+                        font-size: 0.875rem;
+                        font-weight: 500;
+                        transition: all 0.2s;
+                    `;
+                }
+            });
+        }
+
+        function filterComponents() {
+            const components = document.querySelectorAll('.component-accordion');
+
+            if (selectedTags.size === 0) {
+                // Show all components if no tags selected
+                components.forEach(component => {
+                    component.style.display = 'block';
+                });
+                return;
+            }
+
+            components.forEach(component => {
+                const tagsAttr = component.getAttribute('data-component-tags');
+                if (tagsAttr) {
+                    const componentTags = tagsAttr.split(',').map(tag => tag.trim()).filter(tag => tag);
+                    const hasSelectedTag = componentTags.some(tag => selectedTags.has(tag));
+                    component.style.display = hasSelectedTag ? 'block' : 'none';
+                } else {
+                    component.style.display = 'none';
+                }
+            });
+        }
+
+        function clearTagFilters() {
+            selectedTags.clear();
+            updateTagFilterButtons();
+            filterComponents();
+        }
+
+        // Component editing functionality
+        let currentEditComponentId = null;
+
+        function showEditComponentModal(componentId, name, type, technology, description, tags) {
+            console.log('Opening edit component modal for:', componentId);
+            currentEditComponentId = componentId;
+
+            document.getElementById('editComponentModal').classList.add('active');
+
+            // Populate form fields
+            document.getElementById('editComponentName').value = name || '';
+            document.getElementById('editComponentType').value = type || '';
+            document.getElementById('editComponentTechnology').value = technology || '';
+            document.getElementById('editComponentTags').value = tags || '';
+            document.getElementById('editComponentDescription').value = description || '';
+        }
+
+        function updateComponent() {
+            if (!currentEditComponentId) {
+                alert('Error: No component selected for editing');
+                return;
+            }
+
+            const name = document.getElementById('editComponentName').value.trim();
+            const type = document.getElementById('editComponentType').value;
+            const technology = document.getElementById('editComponentTechnology').value.trim();
+            const description = document.getElementById('editComponentDescription').value.trim();
+            const tagsInput = document.getElementById('editComponentTags').value.trim();
+
+            if (!name) {
+                alert('Please enter a component name');
+                return;
+            }
+            if (!type) {
+                alert('Please select a component type');
+                return;
+            }
+
+            // Parse tags from comma-separated string
+            const tags = tagsInput ? tagsInput.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0) : [];
+
+            const data = {
+                id: currentEditComponentId,
+                name: name,
+                component_type: type,
+                technology: technology || null,
+                description: description || null,
+                tags: tags
+            };
+
+            console.log('Updating component:', data);
+
+            fetch('/api/components/update', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (result.success) {
+                    console.log('Component updated successfully:', result);
+                    closeModal('editComponentModal');
+                    // Reload the page to show the updated component
+                    window.location.reload();
+                } else {
+                    alert('Error updating component: ' + (result.error || 'Unknown error'));
+                }
+            })
+            .catch(error => {
+                console.error('Error updating component:', error);
+                alert('Error updating component. Please try again.');
+            });
+        }
+
         // Debug logging
         document.addEventListener('DOMContentLoaded', function() {
             console.log('DOM loaded, project data:', projectData);
+            initializeTagFilters();
         });
     </script>
 </body>
