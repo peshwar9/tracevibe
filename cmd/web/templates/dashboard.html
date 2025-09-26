@@ -28,8 +28,10 @@
 </div>
 
 <div class="card">
-    <div class="card-header">
+    <div class="card-header" style="display: flex !important; justify-content: space-between !important; align-items: center !important; background-color: #f1f5f9 !important;">
         <h2 class="card-title">Projects</h2>
+        <div style="background: red; padding: 10px; color: white;">DEBUG BUTTON AREA</div>
+        <button onclick="showImportModal()" class="btn btn-primary" style="position: relative !important; background-color: #3b82f6 !important; color: white !important; border: 2px solid #1e40af; padding: 0.5rem 1rem; font-weight: 600;">Import Project</button>
     </div>
     <div class="card-content">
         <table class="table">
@@ -74,6 +76,7 @@
         <p style="color: #9ca3af; margin-bottom: 2rem;">
             Import your first RTM project to get started.
         </p>
+        <button onclick="showImportModal()" class="btn btn-primary" style="margin-bottom: 2rem;">Import Project</button>
         <div style="background: #f8fafc; padding: 1.5rem; border-radius: 8px; margin: 2rem 0;">
             <h3 style="color: #374151; margin-bottom: 1rem;">Quick Start</h3>
             <ol style="text-align: left; color: #6b7280; line-height: 1.8;">

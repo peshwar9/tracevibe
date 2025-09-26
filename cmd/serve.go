@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	"github.com/peshwar9/tracevibe/internal/database"
+	"github.com/peshwar9/tracevibe/internal/importer"
 	"github.com/peshwar9/tracevibe/internal/models"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -102,6 +104,7 @@ func startServer(port int, dbPath string, projectBasePath string) error {
 	http.HandleFunc("/api/projects/create", server.createProjectHandler)
 	http.HandleFunc("/api/components", server.componentsAPIHandler)
 	http.HandleFunc("/api/components/update", server.updateComponentHandler)
+	http.HandleFunc("/api/import", server.importHandler)
 	http.HandleFunc("/api/requirements/", server.requirementsAPIHandler)
 	http.HandleFunc("/api/", server.apiHandler)
 
@@ -2132,6 +2135,74 @@ func (s *Server) updateComponentHandler(w http.ResponseWriter, r *http.Request) 
 		"success": true,
 		"id":      data.ID,
 		"name":    data.Name,
+	}
+
+	json.NewEncoder(w).Encode(response)
+}
+
+// Import handler for web-based file uploads
+func (s *Server) importHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	if r.Method != "POST" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Parse multipart form
+	err := r.ParseMultipartForm(10 << 20) // 10MB max
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error parsing form: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	// Get file from form
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error getting file: %v", err), http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+
+	// Get project key and overwrite flag
+	projectKey := r.FormValue("project_key")
+	overwrite := r.FormValue("overwrite") == "true"
+
+	if projectKey == "" {
+		http.Error(w, "Project key is required", http.StatusBadRequest)
+		return
+	}
+
+	// Create temporary file
+	tempFile, err := os.CreateTemp("", "rtm_import_*"+filepath.Ext(header.Filename))
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error creating temp file: %v", err), http.StatusInternalServerError)
+		return
+	}
+	defer os.Remove(tempFile.Name())
+	defer tempFile.Close()
+
+	// Copy uploaded file to temp file
+	_, err = io.Copy(tempFile, file)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error saving file: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Import using the existing importer
+	importer := importer.New(s.db)
+	err = importer.ImportRTMFile(tempFile.Name(), projectKey, overwrite)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Import failed: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Return success response
+	response := map[string]interface{}{
+		"success":     true,
+		"project_key": projectKey,
+		"filename":    header.Filename,
+		"overwrite":   overwrite,
 	}
 
 	json.NewEncoder(w).Encode(response)
