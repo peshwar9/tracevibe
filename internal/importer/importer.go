@@ -40,8 +40,17 @@ func (imp *Importer) ImportRTMFile(filePath, projectKey string, overwrite bool) 
 
 	switch ext {
 	case ".json":
+		// Debug: Print first part of JSON to see structure
+		fmt.Printf("DEBUG: First 500 chars of JSON: %.500s\n", string(data))
+
 		if err := json.Unmarshal(data, &rtmData); err != nil {
 			return fmt.Errorf("failed to parse JSON: %w", err)
+		}
+
+		// Debug: Check what was parsed
+		fmt.Printf("DEBUG: After parsing - found %d scopes\n", len(rtmData.Scopes))
+		if len(rtmData.Scopes) > 0 && len(rtmData.Scopes[0].UserStories) > 0 {
+			fmt.Printf("DEBUG: First user story in first scope: %+v\n", rtmData.Scopes[0].UserStories[0])
 		}
 	case ".yaml", ".yml":
 		if err := yaml.Unmarshal(data, &rtmData); err != nil {
@@ -93,13 +102,18 @@ func (imp *Importer) importRTMData(rtmData *models.RTMData, overwrite bool) erro
 
 	// Import system components
 	componentMap := make(map[string]string) // component_key -> component_id
+	fmt.Printf("DEBUG: Found %d components to import\n", len(rtmData.SystemComponents))
 	for _, component := range rtmData.SystemComponents {
+		fmt.Printf("DEBUG: Importing component %s (%s)\n", component.ID, component.Name)
 		componentID, err := imp.importComponent(tx, projectID, &component)
 		if err != nil {
+			fmt.Printf("DEBUG: Failed to import component %s: %v\n", component.ID, err)
 			return fmt.Errorf("failed to import component %s: %w", component.ID, err)
 		}
 		componentMap[component.ID] = componentID
+		fmt.Printf("DEBUG: Successfully imported component %s with ID %s\n", component.ID, componentID)
 	}
+	fmt.Printf("DEBUG: Component map has %d entries\n", len(componentMap))
 
 	// Import requirements hierarchically (legacy flat format)
 	for _, req := range rtmData.Requirements {
@@ -109,8 +123,26 @@ func (imp *Importer) importRTMData(rtmData *models.RTMData, overwrite bool) erro
 	}
 
 	// Import scopes hierarchically (new nested format)
-	for _, scope := range rtmData.Scopes {
-		if err := imp.importScope(tx, projectID, componentMap[scope.ComponentID], &scope, overwrite); err != nil {
+	fmt.Printf("DEBUG: Found %d scopes in JSON\n", len(rtmData.Scopes))
+	for i, scope := range rtmData.Scopes {
+		fmt.Printf("DEBUG: Scope %d: %s has %d user stories, ComponentID: %s\n", i, scope.ID, len(scope.UserStories), scope.ComponentID)
+		for j, userStory := range scope.UserStories {
+			fmt.Printf("DEBUG: User story %d: %s has %d tech specs\n", j, userStory.ID, len(userStory.TechSpecs))
+		}
+		componentID, exists := componentMap[scope.ComponentID]
+		if !exists {
+			fmt.Printf("DEBUG: WARNING - Component ID %s not found in component map for scope %s\n", scope.ComponentID, scope.ID)
+			// Try to find a default component or create one
+			if len(componentMap) > 0 {
+				// Use the first component as fallback
+				for _, cid := range componentMap {
+					componentID = cid
+					fmt.Printf("DEBUG: Using fallback component ID %s\n", componentID)
+					break
+				}
+			}
+		}
+		if err := imp.importScope(tx, projectID, componentID, &scope, overwrite); err != nil {
 			return fmt.Errorf("failed to import scope %s: %w", scope.ID, err)
 		}
 	}
@@ -227,12 +259,18 @@ func (imp *Importer) importComponent(tx database.Tx, projectID string, component
 		projectID, component.ID).Scan(&componentID)
 
 	if err != nil {
+		// Convert tags to JSON string
+		tagsJSON, err := models.MarshalStringSliceJSON(component.Tags)
+		if err != nil {
+			return "", fmt.Errorf("failed to marshal tags: %w", err)
+		}
+
 		// Insert new component and get its generated ID
-		query := `INSERT INTO system_components (project_id, component_key, name, component_type, technology, description)
-				  VALUES (?, ?, ?, ?, ?, ?)
+		query := `INSERT INTO system_components (project_id, component_key, name, component_type, technology, description, tags)
+				  VALUES (?, ?, ?, ?, ?, ?, ?)
 				  RETURNING id`
-		err := tx.QueryRow(query, projectID, component.ID, component.Name, component.ComponentType,
-			component.Technology, component.Description).Scan(&componentID)
+		err = tx.QueryRow(query, projectID, component.ID, component.Name, component.ComponentType,
+			component.Technology, component.Description, tagsJSON).Scan(&componentID)
 		if err != nil {
 			return "", err
 		}
@@ -542,7 +580,7 @@ func (imp *Importer) importUserStory(tx database.Tx, projectID, componentID stri
 	// Convert user story to requirement (USER_STORY type)
 	userStoryReq := models.Requirement{
 		ID:              userStory.ID,
-		ComponentID:     "", // Will be set to componentID parameter
+		ComponentID:     "", // Will be set by importRequirement using componentID parameter
 		RequirementType: "USER_STORY",
 		Title:           userStory.Name,
 		Description:     userStory.Description,
@@ -565,10 +603,14 @@ func (imp *Importer) importUserStory(tx database.Tx, projectID, componentID stri
 	}
 
 	// Import tech specs under this user story
+	fmt.Printf("DEBUG: User story %s has %d tech specs\n", userStory.ID, len(userStory.TechSpecs))
 	for _, techSpec := range userStory.TechSpecs {
+		fmt.Printf("DEBUG: Importing tech spec %s\n", techSpec.ID)
 		if err := imp.importTechSpec(tx, projectID, componentID, &techSpec, userStoryReqID, overwrite); err != nil {
+			fmt.Printf("DEBUG: Failed to import tech spec %s: %v\n", techSpec.ID, err)
 			return fmt.Errorf("failed to import tech spec %s: %w", techSpec.ID, err)
 		}
+		fmt.Printf("DEBUG: Successfully imported tech spec %s\n", techSpec.ID)
 	}
 
 	return nil
@@ -576,10 +618,12 @@ func (imp *Importer) importUserStory(tx database.Tx, projectID, componentID stri
 
 // importTechSpec converts tech spec to requirement format
 func (imp *Importer) importTechSpec(tx database.Tx, projectID, componentID string, techSpec *models.TechSpec, parentID string, overwrite bool) error {
+	fmt.Printf("DEBUG: importTechSpec called with techSpec.ID=%s, projectID=%s, componentID=%s, parentID=%s\n", techSpec.ID, projectID, componentID, parentID)
+
 	// Convert tech spec to requirement (TECH_SPEC type)
 	techSpecReq := models.Requirement{
 		ID:                 techSpec.ID,
-		ComponentID:        "", // Will be set to componentID parameter
+		ComponentID:        "", // Will be set by importRequirement using componentID parameter
 		RequirementType:    "TECH_SPEC",
 		Title:              techSpec.Name,
 		Description:        techSpec.Description,
@@ -591,11 +635,14 @@ func (imp *Importer) importTechSpec(tx database.Tx, projectID, componentID strin
 		Tests:              techSpec.TestCoverage,
 	}
 
+	fmt.Printf("DEBUG: About to call importRequirement for tech spec %s\n", techSpec.ID)
 	// Import the tech spec as a requirement
 	if err := imp.importRequirement(tx, projectID, componentID, &techSpecReq, parentID, overwrite); err != nil {
+		fmt.Printf("DEBUG: importRequirement failed for tech spec %s: %v\n", techSpec.ID, err)
 		return fmt.Errorf("failed to import tech spec requirement: %w", err)
 	}
 
+	fmt.Printf("DEBUG: Successfully imported tech spec requirement %s\n", techSpec.ID)
 	return nil
 }
 

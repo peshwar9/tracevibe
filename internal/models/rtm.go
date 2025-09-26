@@ -32,15 +32,16 @@ type Project struct {
 }
 
 type SystemComponent struct {
-	ID            string `json:"id" yaml:"id"`
-	Name          string `json:"name" yaml:"name"`
-	ComponentType string `json:"type" yaml:"type"`
-	DeploymentUnit string `json:"deployment_unit,omitempty" yaml:"deployment_unit,omitempty"`
-	Path          string `json:"path,omitempty" yaml:"path,omitempty"`
-	Technology    string `json:"technology,omitempty" yaml:"technology,omitempty"`
-	Description   string `json:"description,omitempty" yaml:"description,omitempty"`
-	EntryPoint    string `json:"entry_point,omitempty" yaml:"entry_point,omitempty"`
-	BasePath      string `json:"base_path,omitempty" yaml:"base_path,omitempty"`
+	ID            string   `json:"id" yaml:"id"`
+	Name          string   `json:"name" yaml:"name"`
+	ComponentType string   `json:"type" yaml:"type"`
+	DeploymentUnit string  `json:"deployment_unit,omitempty" yaml:"deployment_unit,omitempty"`
+	Path          string   `json:"path,omitempty" yaml:"path,omitempty"`
+	Technology    string   `json:"technology,omitempty" yaml:"technology,omitempty"`
+	Description   string   `json:"description,omitempty" yaml:"description,omitempty"`
+	Tags          []string `json:"tags,omitempty" yaml:"tags,omitempty"`
+	EntryPoint    string   `json:"entry_point,omitempty" yaml:"entry_point,omitempty"`
+	BasePath      string   `json:"base_path,omitempty" yaml:"base_path,omitempty"`
 }
 
 type Requirement struct {

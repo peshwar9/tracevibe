@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -365,7 +366,7 @@ func (db *DB) GenerateNextRequirementKey(projectID, componentID, requirementType
 	var query string
 	var args []interface{}
 
-	switch requirementType {
+	switch strings.ToLower(requirementType) {
 	case "scope":
 		prefix = "SCOPE-"
 		query = `

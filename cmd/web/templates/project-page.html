@@ -224,7 +224,7 @@
                     <div class="requirements-tree">
                         {{if .Requirements}}
                         {{range .Requirements}}
-                        {{if eq .RequirementType "SCOPE"}}
+                        {{if or (eq .RequirementType "SCOPE") (eq .RequirementType "scope")}}
                         <div class="accordion" data-requirement-id="{{.ID}}">
                             <div class="accordion-header" onclick="toggleAccordion(this)">
                                 <div class="req-header">
@@ -260,7 +260,7 @@
                                 {{if .Children}}
                                 <div style="padding: 1rem;">
                                     {{range .Children}}
-                                    {{if eq .RequirementType "USER_STORY"}}
+                                    {{if or (eq .RequirementType "USER_STORY") (eq .RequirementType "user_story")}}
                                     <div class="accordion" style="margin-bottom: 0.75rem;" data-requirement-id="{{.ID}}">
                                         <div class="accordion-header" onclick="toggleAccordion(this)" style="background: #f0f9ff;">
                                             <div class="req-header">
@@ -296,7 +296,7 @@
                                             {{if .Children}}
                                             <div style="padding: 0.75rem;">
                                                 {{range .Children}}
-                                                {{if eq .RequirementType "TECH_SPEC"}}
+                                                {{if or (eq .RequirementType "TECH_SPEC") (eq .RequirementType "tech_spec")}}
                                                 <div style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 4px; padding: 0.75rem; margin-bottom: 0.5rem;" data-requirement-id="{{.ID}}">
                                                     <div class="req-header">
                                                         <div class="req-info">

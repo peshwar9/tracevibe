@@ -254,6 +254,7 @@ func (s *Server) projectOverviewHandler(w http.ResponseWriter, r *http.Request, 
 	if err != nil {
 		data.Error = fmt.Sprintf("Error loading requirements: %v", err)
 	} else {
+		fmt.Printf("DEBUG: Project page loaded %d requirements for project %s\n", len(requirements), projectKey)
 		data.Requirements = requirements
 	}
 
@@ -582,6 +583,7 @@ func (s *Server) getExportDataAsRTM(r *http.Request) (string, *models.RTMData, e
 	if err != nil {
 		return "", nil, fmt.Errorf("error loading requirements: %v", err)
 	}
+	fmt.Printf("DEBUG: Found %d requirements for project ID %s\n", len(requirements), project.ID)
 
 	// Get all components using existing method
 	componentSummaries, err := s.getComponentsSummary(projectKey)
@@ -623,17 +625,21 @@ func (s *Server) getExportDataAsRTM(r *http.Request) (string, *models.RTMData, e
 			ComponentType: comp.ComponentType,
 			Technology:    comp.Technology,
 			Description:   comp.Description,
+			Tags:          comp.Tags,
 		})
 	}
 
 	// Build hierarchical requirements structure (Scopes -> UserStories -> TechSpecs)
+	// Use pointers throughout to avoid copy issues
 	scopeMap := make(map[string]*models.Scope)
 	userStoryMap := make(map[string]*models.UserStory)
+	scopeIndexMap := make(map[string]int)
 
-	// First pass: create all scopes
+	// First pass: create all scopes (store pointers, not copies)
 	for _, req := range requirements {
-		if req.RequirementType == "scope" || req.RequirementType == "SCOPE" {
-			scope := &models.Scope{
+		fmt.Printf("DEBUG: Processing requirement %s of type %s\n", req.RequirementKey, req.RequirementType)
+		if strings.ToLower(req.RequirementType) == "scope" {
+			scope := models.Scope{
 				ID:          req.RequirementKey,
 				ComponentID: req.ComponentID,
 				Name:        req.Title,
@@ -642,17 +648,18 @@ func (s *Server) getExportDataAsRTM(r *http.Request) (string, *models.RTMData, e
 				Status:      req.Status,
 				UserStories: []models.UserStory{},
 			}
-			scopeMap[req.ID] = scope
-			rtmData.Scopes = append(rtmData.Scopes, *scope)
+			scopeIndexMap[req.ID] = len(rtmData.Scopes)
+			rtmData.Scopes = append(rtmData.Scopes, scope)
+			scopeMap[req.ID] = &rtmData.Scopes[len(rtmData.Scopes)-1] // Store pointer to actual element in slice
 		}
 	}
 
 	// Second pass: create user stories and attach to scopes
 	for _, req := range requirements {
-		if req.RequirementType == "user_story" || req.RequirementType == "USER_STORY" {
+		if strings.ToLower(req.RequirementType) == "user_story" {
 			if req.ParentRequirementID != nil {
-				if parentScope, exists := scopeMap[*req.ParentRequirementID]; exists {
-					userStory := &models.UserStory{
+				if scopeIndex, exists := scopeIndexMap[*req.ParentRequirementID]; exists {
+					userStory := models.UserStory{
 						ID:          req.RequirementKey,
 						Name:        req.Title,
 						Description: s.derefString(req.Description),
@@ -660,8 +667,11 @@ func (s *Server) getExportDataAsRTM(r *http.Request) (string, *models.RTMData, e
 						Status:      req.Status,
 						TechSpecs:   []models.TechSpec{},
 					}
-					userStoryMap[req.ID] = userStory
-					parentScope.UserStories = append(parentScope.UserStories, *userStory)
+					// Add to scope's user stories
+					rtmData.Scopes[scopeIndex].UserStories = append(rtmData.Scopes[scopeIndex].UserStories, userStory)
+					// Store pointer to the actual user story in the scope
+					userStoryIndex := len(rtmData.Scopes[scopeIndex].UserStories) - 1
+					userStoryMap[req.ID] = &rtmData.Scopes[scopeIndex].UserStories[userStoryIndex]
 				}
 			}
 		}
@@ -669,7 +679,7 @@ func (s *Server) getExportDataAsRTM(r *http.Request) (string, *models.RTMData, e
 
 	// Third pass: create tech specs and attach to user stories
 	for _, req := range requirements {
-		if req.RequirementType == "tech_spec" || req.RequirementType == "TECH_SPEC" {
+		if strings.ToLower(req.RequirementType) == "tech_spec" {
 			if req.ParentRequirementID != nil {
 				if parentStory, exists := userStoryMap[*req.ParentRequirementID]; exists {
 					// Get implementation details
@@ -687,18 +697,9 @@ func (s *Server) getExportDataAsRTM(r *http.Request) (string, *models.RTMData, e
 						Implementation:     impl,
 						TestCoverage:       testCov,
 					}
+					// Add directly to the user story that's already in the scope
 					parentStory.TechSpecs = append(parentStory.TechSpecs, techSpec)
 				}
-			}
-		}
-	}
-
-	// Update the scopes in rtmData with the populated user stories and tech specs
-	for i, scope := range rtmData.Scopes {
-		for _, updatedScope := range scopeMap {
-			if updatedScope.ID == scope.ID {
-				rtmData.Scopes[i] = *updatedScope
-				break
 			}
 		}
 	}
@@ -1467,19 +1468,19 @@ func (s *Server) getProjectsSummary() ([]ProjectSummary, error) {
 		LEFT JOIN (
 			SELECT project_id, COUNT(*) as scope_count
 			FROM requirements
-			WHERE requirement_type = 'SCOPE'
+			WHERE LOWER(requirement_type) = 'scope'
 			GROUP BY project_id
 		) scope_counts ON p.id = scope_counts.project_id
 		LEFT JOIN (
 			SELECT project_id, COUNT(*) as story_count
 			FROM requirements
-			WHERE requirement_type = 'USER_STORY'
+			WHERE LOWER(requirement_type) = 'user_story'
 			GROUP BY project_id
 		) story_counts ON p.id = story_counts.project_id
 		LEFT JOIN (
 			SELECT project_id, COUNT(*) as tech_count
 			FROM requirements
-			WHERE requirement_type = 'TECH_SPEC'
+			WHERE LOWER(requirement_type) = 'tech_spec'
 			GROUP BY project_id
 		) tech_counts ON p.id = tech_counts.project_id
 		LEFT JOIN (
@@ -1680,20 +1681,28 @@ func (s *Server) getRequirementsTree(projectKey, componentKey string) ([]Require
 		%s
 		ORDER BY r.requirement_key`, whereClause)
 
+	fmt.Printf("DEBUG: getRequirementsTree query: %s\n", query)
+	fmt.Printf("DEBUG: getRequirementsTree args: %v\n", args)
+
 	rows, err := s.db.Query(query, args...)
 	if err != nil {
+		fmt.Printf("DEBUG: Error executing getRequirementsTree query: %v\n", err)
 		return nil, err
 	}
 	defer rows.Close()
 
 	var requirements []RequirementTree
+	rowCount := 0
 	for rows.Next() {
+		rowCount++
 		var req RequirementTree
 		err := rows.Scan(&req.ID, &req.RequirementKey, &req.RequirementType,
 			&req.Title, &req.Description, &req.Category, &req.Status, &req.Priority)
 		if err != nil {
 			return nil, err
 		}
+		fmt.Printf("DEBUG: Retrieved requirement: ID=%s, Key=%s, Type=%s, Title='%s', Category=%s, Status=%s\n",
+			req.ID, req.RequirementKey, req.RequirementType, req.Title, req.Category, req.Status)
 
 		// Get children recursively (simplified for now)
 		children, err := s.getChildRequirements(req.ID)
@@ -1719,6 +1728,7 @@ func (s *Server) getRequirementsTree(projectKey, componentKey string) ([]Require
 		requirements = append(requirements, req)
 	}
 
+	fmt.Printf("DEBUG: getRequirementsTree found %d rows, returning %d requirements\n", rowCount, len(requirements))
 	return requirements, nil
 }
 
@@ -2339,6 +2349,8 @@ func (s *Server) createRequirementHandler(w http.ResponseWriter, r *http.Request
 		http.Error(w, fmt.Sprintf("Invalid request body: %v", err), http.StatusBadRequest)
 		return
 	}
+	fmt.Printf("DEBUG: Creating requirement - ProjectID: %s, ComponentID: %s, Type: %s, Title: %s\n",
+		req.ProjectID, req.ComponentID, req.RequirementType, req.Title)
 
 	// Generate requirement key if not provided
 	if req.RequirementKey == "" {
@@ -2358,10 +2370,13 @@ func (s *Server) createRequirementHandler(w http.ResponseWriter, r *http.Request
 		req.Status = "not_started"
 	}
 
+	fmt.Printf("DEBUG: About to call s.db.CreateRequirement with key: %s\n", req.RequirementKey)
 	if err := s.db.CreateRequirement(&req); err != nil {
+		fmt.Printf("DEBUG: Error creating requirement: %v\n", err)
 		http.Error(w, fmt.Sprintf("Error creating requirement: %v", err), http.StatusInternalServerError)
 		return
 	}
+	fmt.Printf("DEBUG: Successfully created requirement with ID: %s, Key: %s\n", req.ID, req.RequirementKey)
 
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success": true,
