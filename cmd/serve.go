@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/peshwar9/tracevibe/internal/database"
+	"github.com/peshwar9/tracevibe/internal/models"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
@@ -93,6 +94,7 @@ func startServer(port int, dbPath string, projectBasePath string) error {
 	http.HandleFunc("/api/test/run", server.testRunHandler)
 	http.HandleFunc("/api/project/", server.projectAPIHandler)
 	http.HandleFunc("/api/projects/create", server.createProjectHandler)
+	http.HandleFunc("/api/components", server.componentsAPIHandler)
 	http.HandleFunc("/api/requirements/", server.requirementsAPIHandler)
 	http.HandleFunc("/api/", server.apiHandler)
 
@@ -402,7 +404,7 @@ func (s *Server) exportHandler(w http.ResponseWriter, r *http.Request) {
 
 // JSON export handler for LLM consumption
 func (s *Server) exportJSONHandler(w http.ResponseWriter, r *http.Request) {
-	projectKey, exportData, err := s.getExportData(r)
+	projectKey, rtmData, err := s.getExportDataAsRTM(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -413,7 +415,7 @@ func (s *Server) exportJSONHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s-rtm-export.json"`, projectKey))
 
 	// Convert to JSON
-	jsonData, err := json.MarshalIndent(exportData, "", "  ")
+	jsonData, err := json.MarshalIndent(rtmData, "", "  ")
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Error generating JSON: %v", err), http.StatusInternalServerError)
 		return
@@ -424,7 +426,7 @@ func (s *Server) exportJSONHandler(w http.ResponseWriter, r *http.Request) {
 
 // YAML export handler for LLM consumption
 func (s *Server) exportYAMLHandler(w http.ResponseWriter, r *http.Request) {
-	projectKey, exportData, err := s.getExportData(r)
+	projectKey, rtmData, err := s.getExportDataAsRTM(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -435,7 +437,7 @@ func (s *Server) exportYAMLHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s-rtm-export.yaml"`, projectKey))
 
 	// Convert to YAML
-	yamlData, err := yaml.Marshal(exportData)
+	yamlData, err := yaml.Marshal(rtmData)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Error generating YAML: %v", err), http.StatusInternalServerError)
 		return
@@ -535,6 +537,298 @@ func (s *Server) getExportData(r *http.Request) (string, map[string]interface{},
 	}
 
 	return projectKey, exportData, nil
+}
+
+// Helper function to get export data in RTMData format (compatible with import)
+func (s *Server) getExportDataAsRTM(r *http.Request) (string, *models.RTMData, error) {
+	// Extract project key from URL path
+	var path string
+	if strings.HasPrefix(r.URL.Path, "/export-json/") {
+		path = r.URL.Path[len("/export-json/"):]
+	} else if strings.HasPrefix(r.URL.Path, "/export-yaml/") {
+		path = r.URL.Path[len("/export-yaml/"):]
+	} else if strings.HasPrefix(r.URL.Path, "/export-markdown/") {
+		path = r.URL.Path[len("/export-markdown/"):]
+	}
+
+	if path == "" {
+		return "", nil, fmt.Errorf("project key required")
+	}
+
+	// Remove trailing slash and any extra path components
+	projectKey := strings.Split(path, "/")[0]
+	if projectKey == "" {
+		return "", nil, fmt.Errorf("project key required")
+	}
+
+	// Get project data
+	project, err := s.db.GetProjectByKey(projectKey)
+	if err != nil || project == nil {
+		return "", nil, fmt.Errorf("project not found")
+	}
+
+	// Get all requirements for the project
+	requirements, err := s.db.GetRequirementsByProject(project.ID)
+	if err != nil {
+		return "", nil, fmt.Errorf("error loading requirements: %v", err)
+	}
+
+	// Get all components using existing method
+	componentSummaries, err := s.getComponentsSummary(projectKey)
+	if err != nil {
+		return "", nil, fmt.Errorf("error loading components: %v", err)
+	}
+
+	// Create RTMData structure
+	rtmData := &models.RTMData{
+		Metadata: models.RTMMetadata{
+			GeneratedAt: time.Now().Format("2006-01-02 15:04:05"),
+			GeneratedBy: "TraceVibe Export",
+			Project: models.Project{
+				ID:          project.ProjectKey,
+				Name:        project.Name,
+				Description: s.derefString(project.Description),
+				Repository:  s.derefString(project.RepositoryURL),
+				Version:     s.derefString(project.Version),
+				LastUpdated: project.UpdatedAt,
+			},
+		},
+		Project: models.Project{
+			ID:          project.ProjectKey,
+			Name:        project.Name,
+			Description: s.derefString(project.Description),
+			Repository:  s.derefString(project.RepositoryURL),
+			Version:     s.derefString(project.Version),
+			LastUpdated: project.UpdatedAt,
+		},
+		SystemComponents: []models.SystemComponent{},
+		Scopes:          []models.Scope{},
+	}
+
+	// Convert components
+	for _, comp := range componentSummaries {
+		rtmData.SystemComponents = append(rtmData.SystemComponents, models.SystemComponent{
+			ID:            comp.ComponentKey,
+			Name:          comp.Name,
+			ComponentType: comp.ComponentType,
+			Technology:    comp.Technology,
+			Description:   comp.Description,
+		})
+	}
+
+	// Build hierarchical requirements structure (Scopes -> UserStories -> TechSpecs)
+	scopeMap := make(map[string]*models.Scope)
+	userStoryMap := make(map[string]*models.UserStory)
+
+	// First pass: create all scopes
+	for _, req := range requirements {
+		if req.RequirementType == "scope" || req.RequirementType == "SCOPE" {
+			scope := &models.Scope{
+				ID:          req.RequirementKey,
+				ComponentID: req.ComponentID,
+				Name:        req.Title,
+				Description: s.derefString(req.Description),
+				Priority:    req.Priority,
+				Status:      req.Status,
+				UserStories: []models.UserStory{},
+			}
+			scopeMap[req.ID] = scope
+			rtmData.Scopes = append(rtmData.Scopes, *scope)
+		}
+	}
+
+	// Second pass: create user stories and attach to scopes
+	for _, req := range requirements {
+		if req.RequirementType == "user_story" || req.RequirementType == "USER_STORY" {
+			if req.ParentRequirementID != nil {
+				if parentScope, exists := scopeMap[*req.ParentRequirementID]; exists {
+					userStory := &models.UserStory{
+						ID:          req.RequirementKey,
+						Name:        req.Title,
+						Description: s.derefString(req.Description),
+						Priority:    req.Priority,
+						Status:      req.Status,
+						TechSpecs:   []models.TechSpec{},
+					}
+					userStoryMap[req.ID] = userStory
+					parentScope.UserStories = append(parentScope.UserStories, *userStory)
+				}
+			}
+		}
+	}
+
+	// Third pass: create tech specs and attach to user stories
+	for _, req := range requirements {
+		if req.RequirementType == "tech_spec" || req.RequirementType == "TECH_SPEC" {
+			if req.ParentRequirementID != nil {
+				if parentStory, exists := userStoryMap[*req.ParentRequirementID]; exists {
+					// Get implementation details
+					impl, _ := s.getImplementationForRequirement(req.ID)
+					// Get test coverage
+					testCov, _ := s.getTestCoverageForRequirement(project.ID, req.ID)
+
+					techSpec := models.TechSpec{
+						ID:                 req.RequirementKey,
+						Name:               req.Title,
+						Description:        s.derefString(req.Description),
+						Priority:           req.Priority,
+						Status:             req.Status,
+						AcceptanceCriteria: req.AcceptanceCriteria,
+						Implementation:     impl,
+						TestCoverage:       testCov,
+					}
+					parentStory.TechSpecs = append(parentStory.TechSpecs, techSpec)
+				}
+			}
+		}
+	}
+
+	// Update the scopes in rtmData with the populated user stories and tech specs
+	for i, scope := range rtmData.Scopes {
+		for _, updatedScope := range scopeMap {
+			if updatedScope.ID == scope.ID {
+				rtmData.Scopes[i] = *updatedScope
+				break
+			}
+		}
+	}
+
+	return projectKey, rtmData, nil
+}
+
+// Helper function to dereference string pointers
+func (s *Server) derefString(str *string) string {
+	if str == nil {
+		return ""
+	}
+	return *str
+}
+
+// Helper function to get implementation for a requirement
+func (s *Server) getImplementationForRequirement(requirementID string) (*models.Implementation, error) {
+	query := `
+		SELECT layer, file_path, functions
+		FROM implementations
+		WHERE requirement_id = ?`
+
+	rows, err := s.db.Query(query, requirementID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	impl := &models.Implementation{}
+	hasData := false
+
+	for rows.Next() {
+		var layer, filePath, functionsJSON string
+		if err := rows.Scan(&layer, &filePath, &functionsJSON); err != nil {
+			continue
+		}
+
+		hasData = true
+		var functions []string
+		if functionsJSON != "" && functionsJSON != "[]" {
+			if err := json.Unmarshal([]byte(functionsJSON), &functions); err == nil {
+				fileImpl := models.FileImpl{
+					Path:      filePath,
+					Functions: functions,
+				}
+
+				switch layer {
+				case "backend":
+					if impl.Backend == nil {
+						impl.Backend = &models.BackendImpl{Files: []models.FileImpl{}}
+					}
+					impl.Backend.Files = append(impl.Backend.Files, fileImpl)
+				case "frontend":
+					if impl.Frontend == nil {
+						impl.Frontend = &models.FrontendImpl{Files: []models.FileImpl{}}
+					}
+					impl.Frontend.Files = append(impl.Frontend.Files, fileImpl)
+				case "database":
+					if impl.Database == nil {
+						impl.Database = &models.DatabaseImpl{Files: []models.FileImpl{}}
+					}
+					impl.Database.Files = append(impl.Database.Files, fileImpl)
+				}
+			}
+		}
+	}
+
+	if !hasData {
+		return nil, nil
+	}
+	return impl, nil
+}
+
+// Helper function to get test coverage for a requirement
+func (s *Server) getTestCoverageForRequirement(projectID, requirementID string) (*models.TestCoverage, error) {
+	// Query to get test cases for this requirement
+	query := `
+		SELECT tf.file_path, tc.test_name, tf.test_type
+		FROM requirement_test_coverage rtc
+		JOIN test_cases tc ON rtc.test_case_id = tc.id
+		JOIN test_files tf ON tc.test_file_id = tf.id
+		WHERE rtc.requirement_id = ?`
+
+	rows, err := s.db.Query(query, requirementID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	testCov := &models.TestCoverage{
+		UnitTests:        []models.TestFile{},
+		IntegrationTests: []models.TestFile{},
+		E2ETests:         []models.TestFile{},
+	}
+
+	// Group test cases by file and type
+	testFileMap := make(map[string]map[string][]string) // file -> type -> functions
+	hasData := false
+
+	for rows.Next() {
+		var filePath, testName, testType string
+		if err := rows.Scan(&filePath, &testName, &testType); err != nil {
+			continue
+		}
+
+		hasData = true
+		if _, exists := testFileMap[filePath]; !exists {
+			testFileMap[filePath] = make(map[string][]string)
+		}
+
+		if testType == "" {
+			testType = "unit"
+		}
+
+		testFileMap[filePath][testType] = append(testFileMap[filePath][testType], testName)
+	}
+
+	// Convert to TestFile structures
+	for filePath, typeMap := range testFileMap {
+		for testType, functions := range typeMap {
+			tf := models.TestFile{
+				File:      filePath,
+				Functions: functions,
+			}
+
+			switch testType {
+			case "unit":
+				testCov.UnitTests = append(testCov.UnitTests, tf)
+			case "integration":
+				testCov.IntegrationTests = append(testCov.IntegrationTests, tf)
+			case "e2e":
+				testCov.E2ETests = append(testCov.E2ETests, tf)
+			}
+		}
+	}
+
+	if !hasData {
+		return nil, nil
+	}
+	return testCov, nil
 }
 
 // Helper function to generate markdown content
@@ -1613,6 +1907,69 @@ func (s *Server) parseMakeTestOutput(output string) (passed, failed int) {
 	}
 
 	return passed, failed
+}
+
+// Components API handler
+func (s *Server) componentsAPIHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	switch r.Method {
+	case "POST":
+		s.createComponentHandler(w, r)
+	default:
+		http.Error(w, fmt.Sprintf("Method %s not allowed", r.Method), http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) createComponentHandler(w http.ResponseWriter, r *http.Request) {
+	var data struct {
+		ProjectID      string  `json:"project_id"`
+		ComponentKey   string  `json:"component_key"`
+		Name           string  `json:"name"`
+		ComponentType  string  `json:"component_type"`
+		Technology     *string `json:"technology"`
+		Description    *string `json:"description"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+		http.Error(w, fmt.Sprintf("Invalid request body: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	// Validate required fields
+	if data.ProjectID == "" || data.ComponentKey == "" || data.Name == "" || data.ComponentType == "" {
+		http.Error(w, "Missing required fields: project_id, component_key, name, component_type", http.StatusBadRequest)
+		return
+	}
+
+	// Create the component in the database
+	query := `
+		INSERT INTO system_components (project_id, component_key, name, component_type, technology, description)
+		VALUES (?, ?, ?, ?, ?, ?)
+	`
+
+	result, err := s.db.Exec(query, data.ProjectID, data.ComponentKey, data.Name, data.ComponentType, data.Technology, data.Description)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error creating component: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Get the ID of the created component
+	componentID, err := result.LastInsertId()
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error getting component ID: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Return success response
+	response := map[string]interface{}{
+		"success":       true,
+		"id":            componentID,
+		"component_key": data.ComponentKey,
+		"name":          data.Name,
+	}
+
+	json.NewEncoder(w).Encode(response)
 }
 
 // Requirements API handlers

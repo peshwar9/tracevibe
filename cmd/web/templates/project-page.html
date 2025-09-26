@@ -117,6 +117,13 @@
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
             <h1 style="font-size: 2rem; font-weight: 700; color: #1e293b; margin: 0;">{{.Project.Name}}</h1>
             <div style="display: flex; gap: 0.5rem;">
+                <!-- Add Component Button (shown when components exist) -->
+                {{if .ComponentsWithReqs}}
+                <button onclick="showAddComponentModal()" class="btn btn-success">
+                    🏗️ Add Component
+                </button>
+                {{end}}
+
                 <!-- Export Dropdown -->
                 <div style="position: relative; display: inline-block;">
                     <button onclick="toggleExportDropdown()" class="btn btn-primary" style="display: flex; align-items: center; gap: 0.5rem;">
@@ -316,8 +323,11 @@
             <div class="card-content" style="text-align: center; padding: 3rem;">
                 <h2 style="color: #6b7280; margin-bottom: 1rem;">No Components Found</h2>
                 <p style="color: #9ca3af; margin-bottom: 2rem;">
-                    This project doesn't have any system components yet. Import RTM data or create components to get started.
+                    This project doesn't have any system components yet. Create your first component to get started.
                 </p>
+                <button onclick="showAddComponentModal()" class="btn btn-primary" style="font-size: 1rem; padding: 0.75rem 1.5rem;">
+                    🏗️ Add First Component
+                </button>
             </div>
         </div>
         {{end}}
@@ -361,6 +371,54 @@
             <div class="modal-footer">
                 <button class="btn" onclick="closeModal('addScopeModal')">Cancel</button>
                 <button class="btn btn-primary" onclick="addScope()">Add Scope</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Component Modal -->
+    <div id="addComponentModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Add New Component</h2>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Component Name *</label>
+                    <input type="text" id="componentName" class="form-control" placeholder="Enter component name (e.g., User Service, Frontend App)">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Component Type *</label>
+                    <select id="componentType" class="form-control">
+                        <option value="">Select component type</option>
+                        <option value="backend_service">Backend Service</option>
+                        <option value="frontend_app">Frontend Application</option>
+                        <option value="database">Database</option>
+                        <option value="api_gateway">API Gateway</option>
+                        <option value="message_queue">Message Queue</option>
+                        <option value="cache">Cache/Redis</option>
+                        <option value="load_balancer">Load Balancer</option>
+                        <option value="cdn">CDN</option>
+                        <option value="auth_service">Authentication Service</option>
+                        <option value="monitoring">Monitoring</option>
+                        <option value="logging">Logging</option>
+                        <option value="storage">File Storage</option>
+                        <option value="external_api">External API</option>
+                        <option value="microservice">Microservice</option>
+                        <option value="library">Library/Package</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Technology Stack</label>
+                    <input type="text" id="componentTechnology" class="form-control" placeholder="e.g., Node.js, React, PostgreSQL, Docker">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Description</label>
+                    <textarea id="componentDescription" class="form-control" placeholder="Describe the component's purpose and responsibilities"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn" onclick="closeModal('addComponentModal')">Cancel</button>
+                <button class="btn btn-primary" onclick="addComponent()">Add Component</button>
             </div>
         </div>
     </div>
@@ -475,6 +533,64 @@
             document.getElementById('addScopeModal').classList.add('active');
             // Store the component ID for use when creating the scope
             document.getElementById('addScopeModal').dataset.componentId = componentId || projectData.componentId;
+        }
+
+        function showAddComponentModal() {
+            console.log('Opening add component modal');
+            document.getElementById('addComponentModal').classList.add('active');
+            // Clear form fields
+            document.getElementById('componentName').value = '';
+            document.getElementById('componentType').value = '';
+            document.getElementById('componentTechnology').value = '';
+            document.getElementById('componentDescription').value = '';
+        }
+
+        function addComponent() {
+            const name = document.getElementById('componentName').value.trim();
+            const type = document.getElementById('componentType').value;
+            const technology = document.getElementById('componentTechnology').value.trim();
+            const description = document.getElementById('componentDescription').value.trim();
+
+            if (!name) {
+                alert('Please enter a component name');
+                return;
+            }
+            if (!type) {
+                alert('Please select a component type');
+                return;
+            }
+
+            const data = {
+                project_id: projectData.projectId,
+                component_key: name.toLowerCase().replace(/[^a-z0-9]/g, '_'),
+                name: name,
+                component_type: type,
+                technology: technology || null,
+                description: description || null
+            };
+
+            console.log('Creating component:', data);
+
+            fetch('/api/components', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (result.success) {
+                    console.log('Component created successfully:', result);
+                    closeModal('addComponentModal');
+                    // Reload the page to show the new component
+                    window.location.reload();
+                } else {
+                    alert('Error creating component: ' + (result.error || 'Unknown error'));
+                }
+            })
+            .catch(error => {
+                console.error('Error creating component:', error);
+                alert('Error creating component. Please try again.');
+            });
         }
 
         function showAddUserStoryModal(parentId, parentKey) {
