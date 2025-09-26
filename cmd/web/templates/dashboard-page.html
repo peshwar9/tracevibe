@@ -157,14 +157,11 @@
                     <button onclick="showCreateProjectModal()" class="btn btn-primary">+ Create Project</button>
                 </div>
 
-                <div style="background: #f8fafc; padding: 1.5rem; border-radius: 8px; margin: 2rem 0;">
-                    <h3 style="color: #374151; margin-bottom: 1rem;">Quick Start</h3>
-                    <ol style="text-align: left; color: #6b7280; line-height: 1.8;">
-                        <li>Generate guidelines: <code style="background: #e5e7eb; padding: 0.25rem;">tracevibe guidelines</code></li>
-                        <li>Create RTM data with an LLM using the guidelines</li>
-                        <li>Import the data: <code style="background: #e5e7eb; padding: 0.25rem;">tracevibe import your-rtm.yaml --project your-project</code></li>
-                        <li>View in UI: <code style="background: #e5e7eb; padding: 0.25rem;">tracevibe serve</code></li>
-                    </ol>
+                <!-- Info icon with tooltip -->
+                <div style="display: flex; justify-content: center; margin-top: 1rem;">
+                    <button onclick="showUsageInfoModal()" style="background: none; border: none; cursor: pointer; color: #6b7280; font-size: 1.5rem; padding: 0.5rem; border-radius: 50%; transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='#f3f4f6'" onmouseout="this.style.backgroundColor='transparent'" title="How to use TraceVibe">
+                        ℹ️
+                    </button>
                 </div>
             </div>
         </div>
@@ -234,6 +231,57 @@
                     <button type="button" onclick="importProject()" class="btn-primary" style="padding: 0.75rem 1.5rem; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 1rem;">Import Project</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Usage Info Modal -->
+    <div id="usageInfoModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center;">
+        <div style="background: white; border-radius: 8px; padding: 2rem; max-width: 700px; width: 90%; max-height: 90vh; overflow-y: auto;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; border-bottom: 1px solid #e5e7eb; padding-bottom: 1rem;">
+                <h2 style="margin: 0; color: #1e293b;">How to Use TraceVibe</h2>
+                <button onclick="closeUsageInfoModal()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: #6b7280; padding: 0.25rem;">&times;</button>
+            </div>
+
+            <div style="color: #374151; line-height: 1.6;">
+                <p style="margin-bottom: 1.5rem; color: #6b7280;">TraceVibe helps you create and manage Requirements Traceability Matrix (RTM) for projects with AI-generated code. There are three ways to get started:</p>
+
+                <div style="margin-bottom: 2rem;">
+                    <h3 style="color: #059669; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+                        <span style="background: #059669; color: white; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-size: 0.875rem; font-weight: bold;">1</span>
+                        Create a New Project from Scratch
+                    </h3>
+                    <p style="margin-left: 2rem; color: #6b7280;">Start with a blank project and manually add components, requirements, and test cases through the UI.</p>
+                </div>
+
+                <div style="margin-bottom: 2rem;">
+                    <h3 style="color: #3b82f6; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+                        <span style="background: #3b82f6; color: white; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-size: 0.875rem; font-weight: bold;">2</span>
+                        Import an Existing Project
+                    </h3>
+                    <p style="margin-left: 2rem; color: #6b7280;">Import a project that was previously exported from TraceVibe (YAML or JSON format).</p>
+                </div>
+
+                <div style="margin-bottom: 1rem;">
+                    <h3 style="color: #8b5cf6; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+                        <span style="background: #8b5cf6; color: white; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-size: 0.875rem; font-weight: bold;">3</span>
+                        Reverse Engineer Existing Codebase
+                    </h3>
+                    <div style="margin-left: 2rem;">
+                        <p style="color: #6b7280; margin-bottom: 1rem;">For existing codebases, use AI to generate RTM documentation:</p>
+                        <ol style="color: #6b7280; line-height: 1.8; padding-left: 1.5rem;">
+                            <li>Generate guidelines: <code style="background: #f3f4f6; padding: 0.25rem 0.5rem; border-radius: 4px; font-family: monospace;">tracevibe guidelines</code></li>
+                            <li>Use the generated <code style="background: #f3f4f6; padding: 0.25rem 0.5rem; border-radius: 4px; font-family: monospace;">rtm-guidelines.md</code> and prompt with any LLM</li>
+                            <li>Provide the LLM with your repository link and the guidelines</li>
+                            <li>Ask the LLM to analyze your code and generate TraceVibe-compatible YAML/JSON</li>
+                            <li>Import the generated file using the Import button above</li>
+                        </ol>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display: flex; justify-content: center; margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #e5e7eb;">
+                <button onclick="closeUsageInfoModal()" class="btn btn-primary">Got it!</button>
+            </div>
         </div>
     </div>
 
@@ -437,6 +485,23 @@
             const importModal = document.getElementById('importModal');
             if (e.target === importModal) {
                 closeImportModal();
+            }
+        });
+
+        // Usage info modal functions
+        function showUsageInfoModal() {
+            document.getElementById('usageInfoModal').style.display = 'flex';
+        }
+
+        function closeUsageInfoModal() {
+            document.getElementById('usageInfoModal').style.display = 'none';
+        }
+
+        // Close usage info modal when clicking outside
+        document.addEventListener('click', function(e) {
+            const usageInfoModal = document.getElementById('usageInfoModal');
+            if (e.target === usageInfoModal) {
+                closeUsageInfoModal();
             }
         });
     </script>
