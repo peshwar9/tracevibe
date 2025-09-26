@@ -1229,8 +1229,9 @@
                     const tagsAttr = component.getAttribute('data-component-tags');
                     if (tagsAttr) {
                         const componentTags = tagsAttr.split(',').map(tag => tag.trim()).filter(tag => tag);
-                        const hasSelectedTag = componentTags.some(tag => selectedTags.has(tag));
-                        if (hasSelectedTag) {
+                        // AND logic: component must have ALL selected tags
+                        const hasAllSelectedTags = Array.from(selectedTags).every(selectedTag => componentTags.includes(selectedTag));
+                        if (hasAllSelectedTags) {
                             component.style.display = 'block';
                             visibleCount++;
                         } else {
