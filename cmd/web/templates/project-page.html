@@ -117,6 +117,11 @@
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
             <h1 style="font-size: 2rem; font-weight: 700; color: #1e293b; margin: 0;">{{.Project.Name}}</h1>
             <div style="display: flex; gap: 0.5rem;">
+                <!-- Project Context Button -->
+                <button onclick="showProjectContextModal()" class="btn" style="background-color: #8b5cf6; color: white;" title="Edit Project Context for Code Gen Prompts">
+                    📝 Project Context
+                </button>
+
                 <!-- Add Component Button (shown when components exist) -->
                 {{if .ComponentsWithReqs}}
                 <button onclick="showAddComponentModal()" class="btn btn-success">
@@ -214,6 +219,7 @@
                     {{end}}
                 </div>
                 <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <button onclick="event.stopPropagation(); generateCodePrompt('component', '{{.ID}}')" class="btn btn-sm" style="background-color: #8b5cf6; color: white;" title="Generate Code Prompt for Component">🤖 Code Gen Prompt</button>
                     <button onclick="event.stopPropagation(); showEditComponentModal('{{.ID}}', '{{.Name}}', '{{.ComponentType}}', '{{.Technology}}', '{{.Description}}', '{{range $i, $tag := .Tags}}{{if $i}},{{end}}{{$tag}}{{end}}')" class="btn btn-primary">Edit</button>
                     <button onclick="event.stopPropagation(); showAddScopeModal('{{.ID}}')" class="btn btn-success">+ Add Scope</button>
                     <div class="component-toggle">+</div>
@@ -250,6 +256,7 @@
                                         </div>
                                     </div>
                                     <div class="req-actions">
+                                        <button onclick="event.stopPropagation(); generateCodePrompt('scope', '{{.ID}}')" class="btn btn-sm" style="background-color: #8b5cf6; color: white;" title="Generate Code Prompt for Scope">🤖 Code Gen Prompt</button>
                                         <button class="btn btn-sm btn-success" onclick="event.stopPropagation(); showAddUserStoryModal('{{.ID}}', '{{.RequirementKey}}')">+ Story</button>
                                         <button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); deleteRequirement('{{.ID}}', 'scope')">Delete</button>
                                     </div>
@@ -285,7 +292,7 @@
                                                     </div>
                                                 </div>
                                                 <div class="req-actions">
-                                                    <button class="btn btn-sm" style="background-color: #8b5cf6; color: white;" onclick="event.stopPropagation(); generateLLMPrompt('{{.ID}}', '{{.Title}}', '{{.Description}}', '{{.RequirementKey}}', '{{.Status}}', '{{.Priority}}')" title="Generate LLM Implementation Prompt">🤖 LLM</button>
+                                                    <button onclick="event.stopPropagation(); generateCodePrompt('story', '{{.ID}}')" class="btn btn-sm" style="background-color: #8b5cf6; color: white;" title="Generate Code Prompt for Story">🤖 Code Gen Prompt</button>
                                                     <button class="btn btn-sm btn-warning" onclick="event.stopPropagation(); showAddTechSpecModal('{{.ID}}', '{{.RequirementKey}}')">+ Tech Spec</button>
                                                     <button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); deleteRequirement('{{.ID}}', 'user story')">Delete</button>
                                                 </div>
@@ -320,6 +327,7 @@
                                                             </div>
                                                         </div>
                                                         <div class="req-actions">
+                                                            <button onclick="event.stopPropagation(); generateCodePrompt('techspec', '{{.ID}}')" class="btn btn-sm" style="background-color: #8b5cf6; color: white;" title="Generate Code Prompt for Tech Spec">🤖 Code Gen Prompt</button>
                                                             <button class="btn btn-sm btn-danger" onclick="deleteRequirement('{{.ID}}', 'tech spec')">Delete</button>
                                                         </div>
                                                     </div>
@@ -606,6 +614,46 @@
             <div class="modal-footer">
                 <button class="btn" onclick="closeModal('llmPromptModal')">Close</button>
                 <button class="btn btn-primary" onclick="copyPromptToClipboard()" style="background: #8b5cf6;">📋 Copy Prompt</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Project Context Modal -->
+    <div id="projectContextModal" class="modal">
+        <div class="modal-content" style="max-width: 700px; width: 95%;">
+            <div class="modal-header">
+                <h2 style="color: #8b5cf6;">📝 Project Context for Code Gen Prompts</h2>
+                <p style="color: #6b7280; font-size: 0.875rem; margin-top: 0.5rem;">This context will be included in all Code Gen prompts</p>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Project Context</label>
+                    <textarea id="projectContextText" class="form-control" style="min-height: 300px; font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; font-size: 0.875rem; line-height: 1.5;" placeholder="Enter project-specific context, coding standards, architecture guidelines...
+
+Example:
+ARCHITECTURE: Component-based monorepo
+CODING STANDARDS:
+- Use descriptive variable names
+- Include error handling and logging
+- Add RTM reference comments /* RTM: [SPEC_ID] */
+- Write tests for all functions
+- Follow language-specific conventions
+
+TECHNOLOGY STACK:
+- Backend: Go 1.24+
+- Frontend: HTML/CSS/JavaScript
+- Database: SQLite
+- Testing: Go standard testing"></textarea>
+                </div>
+                <div style="margin-top: 1rem; padding: 1rem; background: #fef3c7; border-radius: 6px; border-left: 4px solid #f59e0b;">
+                    <p style="margin: 0; font-size: 0.875rem; color: #92400e;">
+                        <strong>💡 Note:</strong> This context will be automatically included in all Code Gen prompts. Keep it focused on architectural decisions, coding standards, and project-specific guidelines.
+                    </p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn" onclick="closeModal('projectContextModal')">Cancel</button>
+                <button class="btn btn-primary" onclick="saveProjectContext()" style="background: #8b5cf6;">💾 Save Context</button>
             </div>
         </div>
     </div>
@@ -1088,6 +1136,153 @@
             // Set the prompt in the modal and show it
             document.getElementById('llmPromptText').value = prompt;
             document.getElementById('llmPromptModal').classList.add('active');
+        }
+
+        // Generate Code Prompt functionality (new unified function)
+        function generateCodePrompt(level, itemId) {
+            console.log('Generating Code Prompt for:', level, itemId);
+
+            const projectName = '{{.Project.Name}}';
+            const projectKey = '{{.Project.ProjectKey}}';
+            const projectDescription = '{{if .Project.Description}}{{.Project.Description}}{{else}}No description available{{end}}';
+
+            // Get saved project context
+            const savedProjectContext = localStorage.getItem('projectContext_' + projectKey) || '';
+
+            let prompt = '';
+
+            // Build prompt based on level
+            if (level === 'component') {
+                prompt = buildComponentPrompt(itemId, projectName, projectKey, projectDescription, savedProjectContext);
+            } else if (level === 'scope') {
+                prompt = buildScopePrompt(itemId, projectName, projectKey, projectDescription, savedProjectContext);
+            } else if (level === 'story') {
+                prompt = buildStoryPrompt(itemId, projectName, projectKey, projectDescription, savedProjectContext);
+            } else if (level === 'techspec') {
+                prompt = buildTechSpecPrompt(itemId, projectName, projectKey, projectDescription, savedProjectContext);
+            }
+
+            // Show prompt in modal
+            document.getElementById('llmPromptText').value = prompt;
+            document.getElementById('llmPromptModal').classList.add('active');
+        }
+
+        function buildComponentPrompt(componentId, projectName, projectKey, projectDescription, projectContext) {
+            let prompt = '# Component Implementation Request\n\n';
+
+            if (projectContext) {
+                prompt += '## Project Context\n' + projectContext + '\n\n';
+            }
+
+            prompt += '## Project Information\n';
+            prompt += '**Project:** ' + projectName + ' (' + projectKey + ')\n';
+            prompt += '**Project Description:** ' + projectDescription + '\n\n';
+
+            prompt += '## Component Implementation\n';
+            prompt += 'Please help me implement this entire component with all its requirements.\n\n';
+
+            prompt += '## Expected Deliverables\n';
+            prompt += '- Complete component implementation\n';
+            prompt += '- Comprehensive test suite\n';
+            prompt += '- Documentation and comments\n\n';
+
+            prompt += '---\n*Generated from TraceVibe RTM - Component Level*';
+            return prompt;
+        }
+
+        function buildScopePrompt(scopeId, projectName, projectKey, projectDescription, projectContext) {
+            let prompt = '# Scope Implementation Request\n\n';
+
+            if (projectContext) {
+                prompt += '## Project Context\n' + projectContext + '\n\n';
+            }
+
+            prompt += '## Project Information\n';
+            prompt += '**Project:** ' + projectName + ' (' + projectKey + ')\n';
+            prompt += '**Project Description:** ' + projectDescription + '\n\n';
+
+            prompt += '## Scope Implementation\n';
+            prompt += 'Please help me implement this functional scope with all its user stories.\n\n';
+
+            prompt += '## Expected Deliverables\n';
+            prompt += '- Scope architecture design\n';
+            prompt += '- Implementation for all user stories\n';
+            prompt += '- Testing strategy\n\n';
+
+            prompt += '---\n*Generated from TraceVibe RTM - Scope Level*';
+            return prompt;
+        }
+
+        function buildStoryPrompt(storyId, projectName, projectKey, projectDescription, projectContext) {
+            let prompt = '# User Story Implementation Request\n\n';
+
+            if (projectContext) {
+                prompt += '## Project Context\n' + projectContext + '\n\n';
+            }
+
+            prompt += '## Project Information\n';
+            prompt += '**Project:** ' + projectName + ' (' + projectKey + ')\n';
+            prompt += '**Project Description:** ' + projectDescription + '\n\n';
+
+            prompt += '## User Story Implementation\n';
+            prompt += 'Please help me implement this user story with all its technical specifications.\n\n';
+
+            prompt += '## Expected Deliverables\n';
+            prompt += '- User story implementation\n';
+            prompt += '- All technical specifications\n';
+            prompt += '- Unit tests\n\n';
+
+            prompt += '---\n*Generated from TraceVibe RTM - Story Level*';
+            return prompt;
+        }
+
+        function buildTechSpecPrompt(techSpecId, projectName, projectKey, projectDescription, projectContext) {
+            let prompt = '# Technical Specification Implementation\n\n';
+
+            if (projectContext) {
+                prompt += '## Project Context\n' + projectContext + '\n\n';
+            }
+
+            prompt += '## Project Information\n';
+            prompt += '**Project:** ' + projectName + ' (' + projectKey + ')\n';
+            prompt += '**Project Description:** ' + projectDescription + '\n\n';
+
+            prompt += '## Technical Specification Implementation\n';
+            prompt += 'Please help me implement this specific technical specification.\n\n';
+
+            prompt += '## Expected Deliverables\n';
+            prompt += '- Focused implementation\n';
+            prompt += '- Unit tests for this spec\n';
+            prompt += '- Error handling\n\n';
+
+            prompt += '---\n*Generated from TraceVibe RTM - Tech Spec Level*';
+            return prompt;
+        }
+
+        // Project Context Management
+        function showProjectContextModal() {
+            const projectKey = '{{.Project.ProjectKey}}';
+            const savedContext = localStorage.getItem('projectContext_' + projectKey) || '';
+            document.getElementById('projectContextText').value = savedContext;
+            document.getElementById('projectContextModal').classList.add('active');
+        }
+
+        function saveProjectContext() {
+            const projectKey = '{{.Project.ProjectKey}}';
+            const contextText = document.getElementById('projectContextText').value;
+            localStorage.setItem('projectContext_' + projectKey, contextText);
+
+            // Show success feedback
+            const saveButton = document.querySelector('#projectContextModal .btn-primary');
+            const originalText = saveButton.innerHTML;
+            saveButton.innerHTML = '✅ Saved!';
+            saveButton.style.backgroundColor = '#10b981';
+
+            setTimeout(() => {
+                saveButton.innerHTML = originalText;
+                saveButton.style.backgroundColor = '#8b5cf6';
+                closeModal('projectContextModal');
+            }, 1500);
         }
 
         // Copy prompt to clipboard functionality
