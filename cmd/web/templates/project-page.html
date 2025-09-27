@@ -1178,13 +1178,117 @@ TECHNOLOGY STACK:
             prompt += '**Project:** ' + projectName + ' (' + projectKey + ')\n';
             prompt += '**Project Description:** ' + projectDescription + '\n\n';
 
-            prompt += '## Component Implementation\n';
-            prompt += 'Please help me implement this entire component with all its requirements.\n\n';
+            // Find the component accordion
+            const componentAccordion = document.querySelector(`[data-component-id="${componentId}"]`);
+            if (componentAccordion) {
+                // Extract component details
+                const componentHeader = componentAccordion.querySelector('.component-header');
+                const componentName = componentHeader.querySelector('h3').textContent;
+                const componentDetails = componentHeader.querySelector('.component-details');
+
+                let componentInfo = '';
+                if (componentDetails) {
+                    const typeSpan = componentDetails.querySelector('span');
+                    if (typeSpan) componentInfo = typeSpan.textContent;
+                }
+
+                const tagsAttr = componentAccordion.getAttribute('data-component-tags');
+                const tags = tagsAttr ? tagsAttr.split(',').map(t => t.trim()).filter(t => t) : [];
+
+                prompt += '## Component Details\n';
+                prompt += `**Component Name:** ${componentName}\n`;
+                if (componentInfo) prompt += `**Component Info:** ${componentInfo}\n`;
+                if (tags.length > 0) prompt += `**Tags:** ${tags.join(', ')}\n`;
+
+                // Extract description if available
+                const descDiv = componentHeader.querySelector('.description-view, .description-full');
+                if (descDiv && descDiv.textContent.trim() && !descDiv.textContent.includes('Click to add')) {
+                    prompt += `**Description:** ${descDiv.textContent.trim()}\n`;
+                }
+                prompt += '\n';
+
+                // Extract all requirements (scopes, stories, tech specs)
+                const requirementsTree = componentAccordion.querySelector('.requirements-tree');
+                if (requirementsTree) {
+                    const scopes = requirementsTree.querySelectorAll('[data-requirement-id]');
+                    let scopeCount = 0;
+                    let storyCount = 0;
+                    let techSpecCount = 0;
+
+                    prompt += '## Requirements Hierarchy\n\n';
+
+                    scopes.forEach(scopeEl => {
+                        const scopeBadge = scopeEl.querySelector('.badge-info');
+                        if (scopeBadge && scopeBadge.textContent.includes('SCOPE')) {
+                            scopeCount++;
+                            const scopeTitle = scopeEl.querySelector('.req-info > div').textContent.replace(/^SCOPE\s*/, '');
+                            const scopeId = scopeEl.querySelector('.req-info > div:nth-child(2)').textContent.match(/ID: ([^\s]+)/)?.[1] || '';
+                            const scopeDesc = scopeEl.querySelector('.description-view');
+                            const scopeDescText = scopeDesc && !scopeDesc.textContent.includes('Click to add') ? scopeDesc.textContent.trim() : '';
+
+                            prompt += `### 📁 Scope ${scopeCount}: ${scopeTitle}\n`;
+                            prompt += `**ID:** ${scopeId}\n`;
+                            if (scopeDescText) prompt += `**Description:** ${scopeDescText}\n`;
+
+                            // Find user stories within this scope
+                            const stories = scopeEl.querySelectorAll('[data-requirement-id]');
+                            let scopeStoryCount = 0;
+
+                            stories.forEach(storyEl => {
+                                const storyBadge = storyEl.querySelector('.badge-success');
+                                if (storyBadge && storyBadge.textContent.includes('USER STORY')) {
+                                    scopeStoryCount++;
+                                    storyCount++;
+                                    const storyTitle = storyEl.querySelector('.req-info > div').textContent.replace(/^USER STORY\s*/, '');
+                                    const storyId = storyEl.querySelector('.req-info > div:nth-child(2)').textContent.match(/ID: ([^\s]+)/)?.[1] || '';
+                                    const storyDesc = storyEl.querySelector('.description-view');
+                                    const storyDescText = storyDesc && !storyDesc.textContent.includes('Click to add') ? storyDesc.textContent.trim() : '';
+
+                                    prompt += `\n#### 📋 Story ${scopeCount}.${scopeStoryCount}: ${storyTitle}\n`;
+                                    prompt += `**ID:** ${storyId}\n`;
+                                    if (storyDescText) prompt += `**Description:** ${storyDescText}\n`;
+
+                                    // Find tech specs within this story
+                                    const techSpecs = storyEl.querySelectorAll('[data-requirement-id]');
+                                    let storySpecCount = 0;
+
+                                    techSpecs.forEach(specEl => {
+                                        const specBadge = specEl.querySelector('.badge-warning');
+                                        if (specBadge && specBadge.textContent.includes('TECH SPEC')) {
+                                            storySpecCount++;
+                                            techSpecCount++;
+                                            const specTitle = specEl.querySelector('.req-info > div').textContent.replace(/^TECH SPEC\s*/, '');
+                                            const specId = specEl.querySelector('.req-info > div:nth-child(2)').textContent.match(/ID: ([^\s]+)/)?.[1] || '';
+                                            const specDesc = specEl.querySelector('.description-view');
+                                            const specDescText = specDesc && !specDesc.textContent.includes('Click to add') ? specDesc.textContent.trim() : '';
+
+                                            prompt += `\n##### ⚙️ Tech Spec ${scopeCount}.${scopeStoryCount}.${storySpecCount}: ${specTitle}\n`;
+                                            prompt += `**ID:** ${specId}\n`;
+                                            if (specDescText) prompt += `**Requirements:** ${specDescText}\n`;
+                                        }
+                                    });
+                                }
+                            });
+                            prompt += '\n';
+                        }
+                    });
+
+                    prompt += `## Requirements Summary\n`;
+                    prompt += `- **Scopes:** ${scopeCount}\n`;
+                    prompt += `- **User Stories:** ${storyCount}\n`;
+                    prompt += `- **Tech Specs:** ${techSpecCount}\n\n`;
+                }
+            }
+
+            prompt += '## Implementation Request\n';
+            prompt += 'Please help me implement this entire component with all its requirements listed above.\n\n';
 
             prompt += '## Expected Deliverables\n';
-            prompt += '- Complete component implementation\n';
+            prompt += '- Complete component implementation covering all scopes and user stories\n';
+            prompt += '- Implementation for all technical specifications\n';
             prompt += '- Comprehensive test suite\n';
-            prompt += '- Documentation and comments\n\n';
+            prompt += '- Documentation and code comments\n';
+            prompt += '- Error handling and edge cases\n\n';
 
             prompt += '---\n*Generated from TraceVibe RTM - Component Level*';
             return prompt;
@@ -1201,13 +1305,103 @@ TECHNOLOGY STACK:
             prompt += '**Project:** ' + projectName + ' (' + projectKey + ')\n';
             prompt += '**Project Description:** ' + projectDescription + '\n\n';
 
-            prompt += '## Scope Implementation\n';
-            prompt += 'Please help me implement this functional scope with all its user stories.\n\n';
+            // Find the specific scope element
+            const scopeElement = document.querySelector(`[data-requirement-id="${scopeId}"]`);
+            if (scopeElement) {
+                // Extract scope details
+                const scopeTitle = scopeElement.querySelector('.req-info > div').textContent.replace(/^SCOPE\s*/, '');
+                const scopeDetails = scopeElement.querySelector('.req-info > div:nth-child(2)').textContent;
+                const scopeDesc = scopeElement.querySelector('.description-view');
+                const scopeDescText = scopeDesc && !scopeDesc.textContent.includes('Click to add') ? scopeDesc.textContent.trim() : '';
+
+                // Extract component context
+                const componentAccordion = scopeElement.closest('[data-component-id]');
+                let componentName = '';
+                let componentInfo = '';
+                if (componentAccordion) {
+                    const componentHeader = componentAccordion.querySelector('.component-header h3');
+                    if (componentHeader) componentName = componentHeader.textContent;
+                    const componentDetails = componentAccordion.querySelector('.component-details span');
+                    if (componentDetails) componentInfo = componentDetails.textContent;
+                }
+
+                prompt += '## Parent Component\n';
+                if (componentName) prompt += `**Component:** ${componentName}\n`;
+                if (componentInfo) prompt += `**Component Type:** ${componentInfo}\n`;
+                prompt += '\n';
+
+                prompt += '## Scope Details\n';
+                prompt += `**Scope Name:** ${scopeTitle}\n`;
+                const scopeIdMatch = scopeDetails.match(/ID: ([^\s]+)/);
+                const scopeStatusMatch = scopeDetails.match(/Status: ([^\s]+)/);
+                const scopePriorityMatch = scopeDetails.match(/Priority: ([^\s]+)/);
+                if (scopeIdMatch) prompt += `**ID:** ${scopeIdMatch[1]}\n`;
+                if (scopeStatusMatch) prompt += `**Status:** ${scopeStatusMatch[1]}\n`;
+                if (scopePriorityMatch) prompt += `**Priority:** ${scopePriorityMatch[1]}\n`;
+                if (scopeDescText) prompt += `**Description:** ${scopeDescText}\n`;
+                prompt += '\n';
+
+                // Extract all user stories within this scope
+                const stories = scopeElement.querySelectorAll('[data-requirement-id]');
+                let storyCount = 0;
+                let techSpecCount = 0;
+
+                prompt += '## User Stories in this Scope\n\n';
+
+                stories.forEach(storyEl => {
+                    const storyBadge = storyEl.querySelector('.badge-success');
+                    if (storyBadge && storyBadge.textContent.includes('USER STORY')) {
+                        storyCount++;
+                        const storyTitle = storyEl.querySelector('.req-info > div').textContent.replace(/^USER STORY\s*/, '');
+                        const storyDetails = storyEl.querySelector('.req-info > div:nth-child(2)').textContent;
+                        const storyDesc = storyEl.querySelector('.description-view');
+                        const storyDescText = storyDesc && !storyDesc.textContent.includes('Click to add') ? storyDesc.textContent.trim() : '';
+
+                        prompt += `### 📋 Story ${storyCount}: ${storyTitle}\n`;
+                        const storyIdMatch = storyDetails.match(/ID: ([^\s]+)/);
+                        const storyStatusMatch = storyDetails.match(/Status: ([^\s]+)/);
+                        if (storyIdMatch) prompt += `**ID:** ${storyIdMatch[1]}\n`;
+                        if (storyStatusMatch) prompt += `**Status:** ${storyStatusMatch[1]}\n`;
+                        if (storyDescText) prompt += `**Description:** ${storyDescText}\n`;
+
+                        // Find tech specs within this story
+                        const techSpecs = storyEl.querySelectorAll('[data-requirement-id]');
+                        let storySpecCount = 0;
+
+                        techSpecs.forEach(specEl => {
+                            const specBadge = specEl.querySelector('.badge-warning');
+                            if (specBadge && specBadge.textContent.includes('TECH SPEC')) {
+                                storySpecCount++;
+                                techSpecCount++;
+                                const specTitle = specEl.querySelector('.req-info > div').textContent.replace(/^TECH SPEC\s*/, '');
+                                const specDetails = specEl.querySelector('.req-info > div:nth-child(2)').textContent;
+                                const specDesc = specEl.querySelector('.description-view');
+                                const specDescText = specDesc && !specDesc.textContent.includes('Click to add') ? specDesc.textContent.trim() : '';
+
+                                prompt += `\n#### ⚙️ Tech Spec ${storyCount}.${storySpecCount}: ${specTitle}\n`;
+                                const specIdMatch = specDetails.match(/ID: ([^\s]+)/);
+                                if (specIdMatch) prompt += `**ID:** ${specIdMatch[1]}\n`;
+                                if (specDescText) prompt += `**Requirements:** ${specDescText}\n`;
+                            }
+                        });
+                        prompt += '\n';
+                    }
+                });
+
+                prompt += `## Requirements Summary\n`;
+                prompt += `- **User Stories:** ${storyCount}\n`;
+                prompt += `- **Tech Specs:** ${techSpecCount}\n\n`;
+            }
+
+            prompt += '## Implementation Request\n';
+            prompt += 'Please help me implement this functional scope with all its user stories and technical specifications listed above.\n\n';
 
             prompt += '## Expected Deliverables\n';
             prompt += '- Scope architecture design\n';
             prompt += '- Implementation for all user stories\n';
-            prompt += '- Testing strategy\n\n';
+            prompt += '- Implementation for all technical specifications\n';
+            prompt += '- Testing strategy and test cases\n';
+            prompt += '- Error handling and validation\n\n';
 
             prompt += '---\n*Generated from TraceVibe RTM - Scope Level*';
             return prompt;
@@ -1224,13 +1418,94 @@ TECHNOLOGY STACK:
             prompt += '**Project:** ' + projectName + ' (' + projectKey + ')\n';
             prompt += '**Project Description:** ' + projectDescription + '\n\n';
 
-            prompt += '## User Story Implementation\n';
-            prompt += 'Please help me implement this user story with all its technical specifications.\n\n';
+            // Find the specific story element
+            const storyElement = document.querySelector(`[data-requirement-id="${storyId}"]`);
+            if (storyElement) {
+                // Extract component context
+                const componentAccordion = storyElement.closest('[data-component-id]');
+                let componentName = '';
+                let componentInfo = '';
+                if (componentAccordion) {
+                    const componentHeader = componentAccordion.querySelector('.component-header h3');
+                    if (componentHeader) componentName = componentHeader.textContent;
+                    const componentDetails = componentAccordion.querySelector('.component-details span');
+                    if (componentDetails) componentInfo = componentDetails.textContent;
+                }
+
+                // Extract scope context
+                const scopeElement = storyElement.closest('[data-requirement-id]').parentElement.closest('[data-requirement-id]');
+                let scopeName = '';
+                let scopeId = '';
+                if (scopeElement) {
+                    const scopeBadge = scopeElement.querySelector('.badge-info');
+                    if (scopeBadge && scopeBadge.textContent.includes('SCOPE')) {
+                        scopeName = scopeElement.querySelector('.req-info > div').textContent.replace(/^SCOPE\s*/, '');
+                        const scopeDetails = scopeElement.querySelector('.req-info > div:nth-child(2)').textContent;
+                        const scopeIdMatch = scopeDetails.match(/ID: ([^\s]+)/);
+                        if (scopeIdMatch) scopeId = scopeIdMatch[1];
+                    }
+                }
+
+                // Extract story details
+                const storyTitle = storyElement.querySelector('.req-info > div').textContent.replace(/^USER STORY\s*/, '');
+                const storyDetails = storyElement.querySelector('.req-info > div:nth-child(2)').textContent;
+                const storyDesc = storyElement.querySelector('.description-view');
+                const storyDescText = storyDesc && !storyDesc.textContent.includes('Click to add') ? storyDesc.textContent.trim() : '';
+
+                prompt += '## Context Hierarchy\n';
+                if (componentName) prompt += `**Component:** ${componentName}\n`;
+                if (componentInfo) prompt += `**Component Type:** ${componentInfo}\n`;
+                if (scopeName) prompt += `**Parent Scope:** ${scopeName} (${scopeId})\n`;
+                prompt += '\n';
+
+                prompt += '## User Story Details\n';
+                prompt += `**Story Name:** ${storyTitle}\n`;
+                const storyIdMatch = storyDetails.match(/ID: ([^\s]+)/);
+                const storyStatusMatch = storyDetails.match(/Status: ([^\s]+)/);
+                if (storyIdMatch) prompt += `**ID:** ${storyIdMatch[1]}\n`;
+                if (storyStatusMatch) prompt += `**Status:** ${storyStatusMatch[1]}\n`;
+                if (storyDescText) prompt += `**Description:** ${storyDescText}\n`;
+                prompt += '\n';
+
+                // Extract all tech specs within this story
+                const techSpecs = storyElement.querySelectorAll('[data-requirement-id]');
+                let techSpecCount = 0;
+
+                prompt += '## Technical Specifications\n\n';
+
+                techSpecs.forEach(specEl => {
+                    const specBadge = specEl.querySelector('.badge-warning');
+                    if (specBadge && specBadge.textContent.includes('TECH SPEC')) {
+                        techSpecCount++;
+                        const specTitle = specEl.querySelector('.req-info > div').textContent.replace(/^TECH SPEC\s*/, '');
+                        const specDetails = specEl.querySelector('.req-info > div:nth-child(2)').textContent;
+                        const specDesc = specEl.querySelector('.description-view');
+                        const specDescText = specDesc && !specDesc.textContent.includes('Click to add') ? specDesc.textContent.trim() : '';
+
+                        prompt += `### ⚙️ Tech Spec ${techSpecCount}: ${specTitle}\n`;
+                        const specIdMatch = specDetails.match(/ID: ([^\s]+)/);
+                        const specStatusMatch = specDetails.match(/Status: ([^\s]+)/);
+                        if (specIdMatch) prompt += `**ID:** ${specIdMatch[1]}\n`;
+                        if (specStatusMatch) prompt += `**Status:** ${specStatusMatch[1]}\n`;
+                        if (specDescText) prompt += `**Requirements:** ${specDescText}\n`;
+                        prompt += '\n';
+                    }
+                });
+
+                prompt += `## Implementation Summary\n`;
+                prompt += `- **Technical Specifications:** ${techSpecCount}\n\n`;
+            }
+
+            prompt += '## Implementation Request\n';
+            prompt += 'Please help me implement this user story with all its technical specifications listed above.\n\n';
 
             prompt += '## Expected Deliverables\n';
             prompt += '- User story implementation\n';
-            prompt += '- All technical specifications\n';
-            prompt += '- Unit tests\n\n';
+            prompt += '- Implementation for all technical specifications\n';
+            prompt += '- Unit tests for each tech spec\n';
+            prompt += '- Integration tests for the complete user story\n';
+            prompt += '- Error handling and validation\n';
+            prompt += '- Documentation and code comments\n\n';
 
             prompt += '---\n*Generated from TraceVibe RTM - Story Level*';
             return prompt;
@@ -1247,13 +1522,117 @@ TECHNOLOGY STACK:
             prompt += '**Project:** ' + projectName + ' (' + projectKey + ')\n';
             prompt += '**Project Description:** ' + projectDescription + '\n\n';
 
-            prompt += '## Technical Specification Implementation\n';
-            prompt += 'Please help me implement this specific technical specification.\n\n';
+            // Find the specific tech spec element
+            const techSpecElement = document.querySelector(`[data-requirement-id="${techSpecId}"]`);
+            if (techSpecElement) {
+                // Extract component context
+                const componentAccordion = techSpecElement.closest('[data-component-id]');
+                let componentName = '';
+                let componentInfo = '';
+                if (componentAccordion) {
+                    const componentHeader = componentAccordion.querySelector('.component-header h3');
+                    if (componentHeader) componentName = componentHeader.textContent;
+                    const componentDetails = componentAccordion.querySelector('.component-details span');
+                    if (componentDetails) componentInfo = componentDetails.textContent;
+                }
+
+                // Extract scope context by traversing up the DOM
+                let scopeElement = techSpecElement.parentElement;
+                while (scopeElement && !scopeElement.querySelector('.badge-info')) {
+                    scopeElement = scopeElement.parentElement;
+                }
+                let scopeName = '';
+                let scopeId = '';
+                if (scopeElement) {
+                    const scopeBadge = scopeElement.querySelector('.badge-info');
+                    if (scopeBadge && scopeBadge.textContent.includes('SCOPE')) {
+                        scopeName = scopeElement.querySelector('.req-info > div').textContent.replace(/^SCOPE\s*/, '');
+                        const scopeDetails = scopeElement.querySelector('.req-info > div:nth-child(2)').textContent;
+                        const scopeIdMatch = scopeDetails.match(/ID: ([^\s]+)/);
+                        if (scopeIdMatch) scopeId = scopeIdMatch[1];
+                    }
+                }
+
+                // Extract story context by traversing up the DOM
+                let storyElement = techSpecElement.parentElement;
+                while (storyElement && !storyElement.querySelector('.badge-success')) {
+                    storyElement = storyElement.parentElement;
+                }
+                let storyName = '';
+                let storyId = '';
+                let storyDesc = '';
+                if (storyElement) {
+                    const storyBadge = storyElement.querySelector('.badge-success');
+                    if (storyBadge && storyBadge.textContent.includes('USER STORY')) {
+                        storyName = storyElement.querySelector('.req-info > div').textContent.replace(/^USER STORY\s*/, '');
+                        const storyDetails = storyElement.querySelector('.req-info > div:nth-child(2)').textContent;
+                        const storyIdMatch = storyDetails.match(/ID: ([^\s]+)/);
+                        if (storyIdMatch) storyId = storyIdMatch[1];
+                        const storyDescEl = storyElement.querySelector('.description-view');
+                        if (storyDescEl && !storyDescEl.textContent.includes('Click to add')) {
+                            storyDesc = storyDescEl.textContent.trim();
+                        }
+                    }
+                }
+
+                // Extract tech spec details
+                const specTitle = techSpecElement.querySelector('.req-info > div').textContent.replace(/^TECH SPEC\s*/, '');
+                const specDetails = techSpecElement.querySelector('.req-info > div:nth-child(2)').textContent;
+                const specDesc = techSpecElement.querySelector('.description-view');
+                const specDescText = specDesc && !specDesc.textContent.includes('Click to add') ? specDesc.textContent.trim() : '';
+
+                prompt += '## Context Hierarchy\n';
+                if (componentName) prompt += `**Component:** ${componentName}\n`;
+                if (componentInfo) prompt += `**Component Type:** ${componentInfo}\n`;
+                if (scopeName) prompt += `**Parent Scope:** ${scopeName} (${scopeId})\n`;
+                if (storyName) prompt += `**Parent User Story:** ${storyName} (${storyId})\n`;
+                if (storyDesc) prompt += `**Story Description:** ${storyDesc}\n`;
+                prompt += '\n';
+
+                prompt += '## Technical Specification Details\n';
+                prompt += `**Tech Spec Name:** ${specTitle}\n`;
+                const specIdMatch = specDetails.match(/ID: ([^\s]+)/);
+                const specStatusMatch = specDetails.match(/Status: ([^\s]+)/);
+                if (specIdMatch) prompt += `**ID:** ${specIdMatch[1]}\n`;
+                if (specStatusMatch) prompt += `**Status:** ${specStatusMatch[1]}\n`;
+                if (specDescText) prompt += `**Requirements:** ${specDescText}\n`;
+                prompt += '\n';
+
+                // Show related tech specs in the same story
+                if (storyElement) {
+                    const allTechSpecs = storyElement.querySelectorAll('[data-requirement-id]');
+                    const otherSpecs = [];
+
+                    allTechSpecs.forEach(specEl => {
+                        const specBadge = specEl.querySelector('.badge-warning');
+                        if (specBadge && specBadge.textContent.includes('TECH SPEC')) {
+                            const relatedSpecId = specEl.getAttribute('data-requirement-id');
+                            if (relatedSpecId !== techSpecId) {
+                                const relatedSpecTitle = specEl.querySelector('.req-info > div').textContent.replace(/^TECH SPEC\s*/, '');
+                                const relatedSpecDetails = specEl.querySelector('.req-info > div:nth-child(2)').textContent;
+                                const relatedSpecIdMatch = relatedSpecDetails.match(/ID: ([^\s]+)/);
+                                otherSpecs.push(`- ${relatedSpecTitle} (${relatedSpecIdMatch ? relatedSpecIdMatch[1] : 'N/A'})`);
+                            }
+                        }
+                    });
+
+                    if (otherSpecs.length > 0) {
+                        prompt += '## Related Tech Specs in Same Story\n';
+                        prompt += otherSpecs.join('\n') + '\n\n';
+                        prompt += '*Consider how this spec relates to and integrates with the above specifications.*\n\n';
+                    }
+                }
+            }
+
+            prompt += '## Implementation Request\n';
+            prompt += 'Please help me implement this specific technical specification within the context of its parent user story and scope.\n\n';
 
             prompt += '## Expected Deliverables\n';
-            prompt += '- Focused implementation\n';
-            prompt += '- Unit tests for this spec\n';
-            prompt += '- Error handling\n\n';
+            prompt += '- Focused implementation for this specific tech spec\n';
+            prompt += '- Unit tests specifically for this specification\n';
+            prompt += '- Error handling and validation\n';
+            prompt += '- Integration considerations with related tech specs\n';
+            prompt += '- Documentation and inline comments\n\n';
 
             prompt += '---\n*Generated from TraceVibe RTM - Tech Spec Level*';
             return prompt;
