@@ -79,7 +79,8 @@
             <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
                 <h2 class="card-title">Projects</h2>
                 <div style="display: flex; gap: 0.5rem;">
-                    <button onclick="showImportModal()" class="btn btn-primary" style="background-color: #059669; border: 1px solid #059669;">📤 Import Project</button>
+                    <button onclick="showMethodologyModal()" class="btn" style="background-color: #059669; color: white; border: 1px solid #047857;" title="Configure TraceVibe Code Generation Methodology">🏗️ Methodology</button>
+                    <button onclick="showImportModal()" class="btn btn-primary" style="background-color: #3b82f6; border: 1px solid #2563eb;">📤 Import Project</button>
                     <button onclick="showCreateProjectModal()" class="btn btn-primary">+ Create Project</button>
                 </div>
             </div>
@@ -234,6 +235,38 @@
         </div>
     </div>
 
+    <!-- Methodology Modal -->
+    <div id="methodologyModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center;">
+        <div style="background: white; border-radius: 8px; padding: 2rem; max-width: 800px; width: 90%; max-height: 90vh; overflow-y: auto;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; border-bottom: 1px solid #e5e7eb; padding-bottom: 1rem;">
+                <h2 style="margin: 0; color: #059669;">🏗️ TraceVibe Code Generation Methodology</h2>
+                <button onclick="closeMethodologyModal()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: #6b7280; padding: 0.25rem;">&times;</button>
+            </div>
+
+            <p style="color: #6b7280; font-size: 0.875rem; margin-bottom: 1rem;">Configure how LLMs should approach code generation using TraceVibe RTM structure</p>
+
+            <div style="margin-bottom: 1rem;">
+                <label style="display: block; margin-bottom: 0.5rem; font-weight: 600; color: #374151;">Methodology Instructions</label>
+                <textarea id="methodologyText" style="width: 100%; min-height: 400px; padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 6px; font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; font-size: 0.875rem; line-height: 1.5;"></textarea>
+            </div>
+
+            <div style="margin-bottom: 1rem;">
+                <button onclick="loadDefaultMethodology()" style="padding: 0.5rem 1rem; background-color: #f59e0b; color: white; border: none; border-radius: 6px; cursor: pointer;">🔄 Load Default Template</button>
+            </div>
+
+            <div style="padding: 1rem; background: #f0f9ff; border-radius: 6px; border-left: 4px solid #0ea5e9; margin-bottom: 1.5rem;">
+                <p style="margin: 0; font-size: 0.875rem; color: #0c4a6e;">
+                    <strong>💡 Note:</strong> This methodology context will be included in all Code Gen prompts to guide the LLM on TraceVibe's component-based approach, code organization, and testing strategies.
+                </p>
+            </div>
+
+            <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+                <button onclick="closeMethodologyModal()" style="padding: 0.75rem 1.5rem; border: 1px solid #d1d5db; background: white; color: #374151; border-radius: 6px; cursor: pointer; font-size: 1rem;">Cancel</button>
+                <button onclick="saveMethodology()" style="padding: 0.75rem 1.5rem; background: #059669; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 1rem;">💾 Save Methodology</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Usage Info Modal -->
     <div id="usageInfoModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center;">
         <div style="background: white; border-radius: 8px; padding: 2rem; max-width: 700px; width: 90%; max-height: 90vh; overflow-y: auto;">
@@ -286,6 +319,143 @@
     </div>
 
     <script>
+        // TraceVibe Methodology Management
+        function showMethodologyModal() {
+            const modal = document.getElementById('methodologyModal');
+            modal.style.display = 'flex';
+
+            const savedMethodology = localStorage.getItem('tracevibeMethodology') || '';
+            if (!savedMethodology) {
+                loadDefaultMethodology();
+            } else {
+                document.getElementById('methodologyText').value = savedMethodology;
+            }
+        }
+
+        function closeMethodologyModal() {
+            document.getElementById('methodologyModal').style.display = 'none';
+        }
+
+        function saveMethodology() {
+            const methodologyText = document.getElementById('methodologyText').value;
+            localStorage.setItem('tracevibeMethodology', methodologyText);
+
+            // Show success feedback
+            const saveButton = document.querySelector('#methodologyModal button[onclick="saveMethodology()"]');
+            const originalText = saveButton.innerHTML;
+            saveButton.innerHTML = '✅ Saved!';
+            saveButton.style.backgroundColor = '#10b981';
+
+            setTimeout(() => {
+                saveButton.innerHTML = originalText;
+                saveButton.style.backgroundColor = '#059669';
+                closeMethodologyModal();
+            }, 1500);
+        }
+
+        function loadDefaultMethodology() {
+            const defaultMethodology = `# TraceVibe Code Generation Methodology
+
+## Overview
+TraceVibe follows a component-based architecture where each component is an independently deployable unit with its own source code, tests, build configuration, and deployment setup.
+
+## Code Organization Structure
+
+### Component-Based Architecture
+\`\`\`
+project-root/
+├── components/
+│   ├── component-1/
+│   │   ├── src/                 # Source code
+│   │   ├── tests/               # Unit & integration tests
+│   │   ├── config/              # Component-specific config
+│   │   ├── build/               # Build scripts & artifacts
+│   │   ├── deploy/              # Deployment configurations
+│   │   └── docs/                # Component documentation
+│   ├── component-2/
+│   │   └── [same structure]
+│   └── shared/                  # Shared utilities & libraries
+├── docs/                        # Project-level documentation
+├── scripts/                     # Build & deployment orchestration
+└── infrastructure/              # Infrastructure as code
+\`\`\`
+
+## Implementation Guidelines
+
+### 1. Component Independence
+- Each component should be independently:
+  - **Testable**: Complete test suite in component/tests/
+  - **Buildable**: Build scripts in component/build/
+  - **Deployable**: Deployment config in component/deploy/
+  - **Configurable**: Environment-specific config in component/config/
+
+### 2. Code Generation Approach
+When implementing requirements:
+
+**Component Level**:
+- Generate complete component structure
+- Include all architectural layers (API, business logic, data access)
+- Create comprehensive test suite
+- Add build and deployment configurations
+
+**Scope Level**:
+- Implement functional scope across relevant components
+- Ensure cross-component integration
+- Create integration tests
+- Document scope-level architecture decisions
+
+**Story Level**:
+- Implement user journey end-to-end
+- Include frontend, backend, and data layers as needed
+- Create user acceptance tests
+- Document user story completion criteria
+
+**Tech Spec Level**:
+- Focus on specific technical implementation
+- Include detailed unit tests
+- Document technical decisions and trade-offs
+- Ensure integration with related specs
+
+### 3. Testing Strategy
+- **Unit Tests**: In component/tests/unit/
+- **Integration Tests**: In component/tests/integration/
+- **End-to-End Tests**: In component/tests/e2e/
+- **Contract Tests**: For API boundaries between components
+
+### 4. Documentation Standards
+- **README.md**: Component overview and quick start
+- **API.md**: API documentation for components with interfaces
+- **ARCHITECTURE.md**: Component architecture decisions
+- **TESTING.md**: How to run and maintain tests
+
+### 5. RTM Integration
+- Add RTM reference comments in code: \`/* RTM: [SPEC_ID] */\`
+- Map requirements to implementation files
+- Maintain traceability from code back to requirements
+- Update RTM when implementation deviates from specs
+
+## Deployment Considerations
+- Each component can be deployed independently
+- Use container-based deployment when possible
+- Include health checks and monitoring
+- Implement circuit breakers for component communication
+- Plan for graceful degradation when components are unavailable
+
+## Quality Gates
+Before considering implementation complete:
+1. ✅ All RTM requirements mapped to code
+2. ✅ Test coverage meets project standards
+3. ✅ Component can be built independently
+4. ✅ Component can be deployed independently
+5. ✅ Documentation is complete and up-to-date
+6. ✅ Security review completed (if applicable)
+7. ✅ Performance benchmarks meet requirements
+
+This methodology ensures that code generated from TraceVibe RTM follows consistent, maintainable, and scalable patterns.`;
+
+            document.getElementById('methodologyText').value = defaultMethodology;
+        }
+
         // Project creation functions
         function showCreateProjectModal() {
             document.getElementById('createProjectModal').style.display = 'block';

@@ -658,6 +658,7 @@ TECHNOLOGY STACK:
         </div>
     </div>
 
+
     <script>
         // Project data from server - need to get the actual component ID
         const projectData = {
@@ -1146,20 +1147,28 @@ TECHNOLOGY STACK:
             const projectKey = '{{.Project.ProjectKey}}';
             const projectDescription = '{{if .Project.Description}}{{.Project.Description}}{{else}}No description available{{end}}';
 
-            // Get saved project context
+            // Get saved contexts
             const savedProjectContext = localStorage.getItem('projectContext_' + projectKey) || '';
+            let savedMethodology = localStorage.getItem('tracevibeMethodology') || '';
+
+            // If no methodology is set, use a default one
+            if (!savedMethodology) {
+                savedMethodology = getDefaultMethodology();
+            }
+
+            console.log('Methodology length:', savedMethodology.length);
 
             let prompt = '';
 
             // Build prompt based on level
             if (level === 'component') {
-                prompt = buildComponentPrompt(itemId, projectName, projectKey, projectDescription, savedProjectContext);
+                prompt = buildComponentPrompt(itemId, projectName, projectKey, projectDescription, savedProjectContext, savedMethodology);
             } else if (level === 'scope') {
-                prompt = buildScopePrompt(itemId, projectName, projectKey, projectDescription, savedProjectContext);
+                prompt = buildScopePrompt(itemId, projectName, projectKey, projectDescription, savedProjectContext, savedMethodology);
             } else if (level === 'story') {
-                prompt = buildStoryPrompt(itemId, projectName, projectKey, projectDescription, savedProjectContext);
+                prompt = buildStoryPrompt(itemId, projectName, projectKey, projectDescription, savedProjectContext, savedMethodology);
             } else if (level === 'techspec') {
-                prompt = buildTechSpecPrompt(itemId, projectName, projectKey, projectDescription, savedProjectContext);
+                prompt = buildTechSpecPrompt(itemId, projectName, projectKey, projectDescription, savedProjectContext, savedMethodology);
             }
 
             // Show prompt in modal
@@ -1167,8 +1176,12 @@ TECHNOLOGY STACK:
             document.getElementById('llmPromptModal').classList.add('active');
         }
 
-        function buildComponentPrompt(componentId, projectName, projectKey, projectDescription, projectContext) {
+        function buildComponentPrompt(componentId, projectName, projectKey, projectDescription, projectContext, methodology) {
             let prompt = '# Component Implementation Request\n\n';
+
+            if (methodology) {
+                prompt += '## TraceVibe Methodology\n' + methodology + '\n\n';
+            }
 
             if (projectContext) {
                 prompt += '## Project Context\n' + projectContext + '\n\n';
@@ -1294,8 +1307,12 @@ TECHNOLOGY STACK:
             return prompt;
         }
 
-        function buildScopePrompt(scopeId, projectName, projectKey, projectDescription, projectContext) {
+        function buildScopePrompt(scopeId, projectName, projectKey, projectDescription, projectContext, methodology) {
             let prompt = '# Scope Implementation Request\n\n';
+
+            if (methodology) {
+                prompt += '## TraceVibe Methodology\n' + methodology + '\n\n';
+            }
 
             if (projectContext) {
                 prompt += '## Project Context\n' + projectContext + '\n\n';
@@ -1407,8 +1424,12 @@ TECHNOLOGY STACK:
             return prompt;
         }
 
-        function buildStoryPrompt(storyId, projectName, projectKey, projectDescription, projectContext) {
+        function buildStoryPrompt(storyId, projectName, projectKey, projectDescription, projectContext, methodology) {
             let prompt = '# User Story Implementation Request\n\n';
+
+            if (methodology) {
+                prompt += '## TraceVibe Methodology\n' + methodology + '\n\n';
+            }
 
             if (projectContext) {
                 prompt += '## Project Context\n' + projectContext + '\n\n';
@@ -1511,8 +1532,12 @@ TECHNOLOGY STACK:
             return prompt;
         }
 
-        function buildTechSpecPrompt(techSpecId, projectName, projectKey, projectDescription, projectContext) {
+        function buildTechSpecPrompt(techSpecId, projectName, projectKey, projectDescription, projectContext, methodology) {
             let prompt = '# Technical Specification Implementation\n\n';
+
+            if (methodology) {
+                prompt += '## TraceVibe Methodology\n' + methodology + '\n\n';
+            }
 
             if (projectContext) {
                 prompt += '## Project Context\n' + projectContext + '\n\n';
@@ -1662,6 +1687,108 @@ TECHNOLOGY STACK:
                 saveButton.style.backgroundColor = '#8b5cf6';
                 closeModal('projectContextModal');
             }, 1500);
+        }
+
+        // Default methodology function for fallback
+        function getDefaultMethodology() {
+            return `# TraceVibe Code Generation Methodology
+
+## Overview
+TraceVibe follows a component-based architecture where each component is an independently deployable unit with its own source code, tests, build configuration, and deployment setup.
+
+## Code Organization Structure
+
+### Component-Based Architecture
+\`\`\`
+project-root/
+├── components/
+│   ├── component-1/
+│   │   ├── src/                 # Source code
+│   │   ├── tests/               # Unit & integration tests
+│   │   ├── config/              # Component-specific config
+│   │   ├── build/               # Build scripts & artifacts
+│   │   ├── deploy/              # Deployment configurations
+│   │   └── docs/                # Component documentation
+│   ├── component-2/
+│   │   └── [same structure]
+│   └── shared/                  # Shared utilities & libraries
+├── docs/                        # Project-level documentation
+├── scripts/                     # Build & deployment orchestration
+└── infrastructure/              # Infrastructure as code
+\`\`\`
+
+## Implementation Guidelines
+
+### 1. Component Independence
+- Each component should be independently:
+  - **Testable**: Complete test suite in component/tests/
+  - **Buildable**: Build scripts in component/build/
+  - **Deployable**: Deployment config in component/deploy/
+  - **Configurable**: Environment-specific config in component/config/
+
+### 2. Code Generation Approach
+When implementing requirements:
+
+**Component Level**:
+- Generate complete component structure
+- Include all architectural layers (API, business logic, data access)
+- Create comprehensive test suite
+- Add build and deployment configurations
+
+**Scope Level**:
+- Implement functional scope across relevant components
+- Ensure cross-component integration
+- Create integration tests
+- Document scope-level architecture decisions
+
+**Story Level**:
+- Implement user journey end-to-end
+- Include frontend, backend, and data layers as needed
+- Create user acceptance tests
+- Document user story completion criteria
+
+**Tech Spec Level**:
+- Focus on specific technical implementation
+- Include detailed unit tests
+- Document technical decisions and trade-offs
+- Ensure integration with related specs
+
+### 3. Testing Strategy
+- **Unit Tests**: In component/tests/unit/
+- **Integration Tests**: In component/tests/integration/
+- **End-to-End Tests**: In component/tests/e2e/
+- **Contract Tests**: For API boundaries between components
+
+### 4. Documentation Standards
+- **README.md**: Component overview and quick start
+- **API.md**: API documentation for components with interfaces
+- **ARCHITECTURE.md**: Component architecture decisions
+- **TESTING.md**: How to run and maintain tests
+
+### 5. RTM Integration
+- Add RTM reference comments in code: \`/* RTM: [SPEC_ID] */\`
+- Map requirements to implementation files
+- Maintain traceability from code back to requirements
+- Update RTM when implementation deviates from specs
+
+## Deployment Considerations
+- Each component can be deployed independently
+- Use container-based deployment when possible
+- Include health checks and monitoring
+- Implement circuit breakers for component communication
+- Plan for graceful degradation when components are unavailable
+
+## Quality Gates
+Before considering implementation complete:
+1. ✅ All RTM requirements mapped to code
+2. ✅ Test coverage meets project standards
+3. ✅ Component can be built independently
+4. ✅ Component can be deployed independently
+5. ✅ Documentation is complete and up-to-date
+6. ✅ Security review completed (if applicable)
+7. ✅ Performance benchmarks meet requirements
+
+This methodology ensures that code generated from TraceVibe RTM follows consistent, maintainable, and scalable patterns.`;
         }
 
         // Copy prompt to clipboard functionality

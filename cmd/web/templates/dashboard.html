@@ -30,8 +30,12 @@
 <div class="card">
     <div class="card-header" style="display: flex !important; justify-content: space-between !important; align-items: center !important; background-color: #f1f5f9 !important;">
         <h2 class="card-title">Projects</h2>
-        <div style="background: red; padding: 10px; color: white;">DEBUG BUTTON AREA</div>
-        <button onclick="showImportModal()" class="btn btn-primary" style="position: relative !important; background-color: #3b82f6 !important; color: white !important; border: 2px solid #1e40af; padding: 0.5rem 1rem; font-weight: 600;">Import Project</button>
+        <div style="display: flex; gap: 0.5rem;">
+            <button onclick="showMethodologyModal()" class="btn" style="background-color: #059669; color: white;" title="Configure TraceVibe Code Generation Methodology">
+                🏗️ Methodology
+            </button>
+            <button onclick="showImportModal()" class="btn btn-primary" style="position: relative !important; background-color: #3b82f6 !important; color: white !important; border: 2px solid #1e40af; padding: 0.5rem 1rem; font-weight: 600;">Import Project</button>
+        </div>
     </div>
     <div class="card-content">
         <table class="table">
