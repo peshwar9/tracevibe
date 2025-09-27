@@ -1140,19 +1140,35 @@ TECHNOLOGY STACK:
         }
 
         // Generate Code Prompt functionality (new unified function)
-        function generateCodePrompt(level, itemId) {
+        async function generateCodePrompt(level, itemId) {
             console.log('Generating Code Prompt for:', level, itemId);
 
             const projectName = '{{.Project.Name}}';
             const projectKey = '{{.Project.ProjectKey}}';
             const projectDescription = '{{if .Project.Description}}{{.Project.Description}}{{else}}No description available{{end}}';
 
-            // Get saved contexts
-            const savedProjectContext = localStorage.getItem('projectContext_' + projectKey) || '';
-            let savedMethodology = localStorage.getItem('tracevibeMethodology') || '';
+            // Get saved contexts from API
+            let savedProjectContext = '';
+            let savedMethodology = '';
 
-            // If no methodology is set, use a default one
-            if (!savedMethodology) {
+            try {
+                // Fetch methodology
+                const methodologyResponse = await fetch('/api/methodology');
+                if (methodologyResponse.ok) {
+                    const methodologyData = await methodologyResponse.json();
+                    savedMethodology = methodologyData.methodology || getDefaultMethodology();
+                } else {
+                    savedMethodology = getDefaultMethodology();
+                }
+
+                // Fetch project context
+                const contextResponse = await fetch(`/api/project-context/${projectKey}`);
+                if (contextResponse.ok) {
+                    const contextData = await contextResponse.json();
+                    savedProjectContext = contextData.context || '';
+                }
+            } catch (error) {
+                console.error('Error loading contexts:', error);
                 savedMethodology = getDefaultMethodology();
             }
 
@@ -1664,29 +1680,56 @@ TECHNOLOGY STACK:
         }
 
         // Project Context Management
-        function showProjectContextModal() {
+        async function showProjectContextModal() {
             const projectKey = '{{.Project.ProjectKey}}';
-            const savedContext = localStorage.getItem('projectContext_' + projectKey) || '';
-            document.getElementById('projectContextText').value = savedContext;
+
+            try {
+                const response = await fetch(`/api/project-context/${projectKey}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    document.getElementById('projectContextText').value = data.context || '';
+                } else {
+                    console.error('Failed to load project context:', response.statusText);
+                    document.getElementById('projectContextText').value = '';
+                }
+            } catch (error) {
+                console.error('Error loading project context:', error);
+                document.getElementById('projectContextText').value = '';
+            }
+
             document.getElementById('projectContextModal').classList.add('active');
         }
 
-        function saveProjectContext() {
+        async function saveProjectContext() {
             const projectKey = '{{.Project.ProjectKey}}';
             const contextText = document.getElementById('projectContextText').value;
-            localStorage.setItem('projectContext_' + projectKey, contextText);
 
-            // Show success feedback
-            const saveButton = document.querySelector('#projectContextModal .btn-primary');
-            const originalText = saveButton.innerHTML;
-            saveButton.innerHTML = '✅ Saved!';
-            saveButton.style.backgroundColor = '#10b981';
+            try {
+                const response = await fetch(`/api/project-context/${projectKey}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ context: contextText })
+                });
 
-            setTimeout(() => {
-                saveButton.innerHTML = originalText;
-                saveButton.style.backgroundColor = '#8b5cf6';
-                closeModal('projectContextModal');
-            }, 1500);
+                if (response.ok) {
+                    // Show success feedback
+                    const saveButton = document.querySelector('#projectContextModal .btn-primary');
+                    const originalText = saveButton.innerHTML;
+                    saveButton.innerHTML = '✅ Saved!';
+                    saveButton.style.backgroundColor = '#10b981';
+
+                    setTimeout(() => {
+                        saveButton.innerHTML = originalText;
+                        saveButton.style.backgroundColor = '#8b5cf6';
+                        closeModal('projectContextModal');
+                    }, 1500);
+                } else {
+                    alert('Failed to save project context: ' + response.statusText);
+                }
+            } catch (error) {
+                console.error('Error saving project context:', error);
+                alert('Error saving project context: ' + error.message);
+            }
         }
 
         // Default methodology function for fallback

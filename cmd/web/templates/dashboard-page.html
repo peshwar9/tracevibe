@@ -320,15 +320,22 @@
 
     <script>
         // TraceVibe Methodology Management
-        function showMethodologyModal() {
+        async function showMethodologyModal() {
             const modal = document.getElementById('methodologyModal');
             modal.style.display = 'flex';
 
-            const savedMethodology = localStorage.getItem('tracevibeMethodology') || '';
-            if (!savedMethodology) {
+            try {
+                const response = await fetch('/api/methodology');
+                if (response.ok) {
+                    const data = await response.json();
+                    document.getElementById('methodologyText').value = data.methodology || '';
+                } else {
+                    console.error('Failed to load methodology:', response.statusText);
+                    loadDefaultMethodology();
+                }
+            } catch (error) {
+                console.error('Error loading methodology:', error);
                 loadDefaultMethodology();
-            } else {
-                document.getElementById('methodologyText').value = savedMethodology;
             }
         }
 
@@ -336,21 +343,35 @@
             document.getElementById('methodologyModal').style.display = 'none';
         }
 
-        function saveMethodology() {
+        async function saveMethodology() {
             const methodologyText = document.getElementById('methodologyText').value;
-            localStorage.setItem('tracevibeMethodology', methodologyText);
 
-            // Show success feedback
-            const saveButton = document.querySelector('#methodologyModal button[onclick="saveMethodology()"]');
-            const originalText = saveButton.innerHTML;
-            saveButton.innerHTML = '✅ Saved!';
-            saveButton.style.backgroundColor = '#10b981';
+            try {
+                const response = await fetch('/api/methodology', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ methodology: methodologyText })
+                });
 
-            setTimeout(() => {
-                saveButton.innerHTML = originalText;
-                saveButton.style.backgroundColor = '#059669';
-                closeMethodologyModal();
-            }, 1500);
+                if (response.ok) {
+                    // Show success feedback
+                    const saveButton = document.querySelector('#methodologyModal button[onclick="saveMethodology()"]');
+                    const originalText = saveButton.innerHTML;
+                    saveButton.innerHTML = '✅ Saved!';
+                    saveButton.style.backgroundColor = '#10b981';
+
+                    setTimeout(() => {
+                        saveButton.innerHTML = originalText;
+                        saveButton.style.backgroundColor = '#059669';
+                        closeMethodologyModal();
+                    }, 1500);
+                } else {
+                    alert('Failed to save methodology: ' + response.statusText);
+                }
+            } catch (error) {
+                console.error('Error saving methodology:', error);
+                alert('Error saving methodology: ' + error.message);
+            }
         }
 
         function loadDefaultMethodology() {

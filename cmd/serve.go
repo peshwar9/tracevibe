@@ -106,6 +106,8 @@ func startServer(port int, dbPath string, projectBasePath string) error {
 	http.HandleFunc("/api/components/update", server.updateComponentHandler)
 	http.HandleFunc("/api/import", server.importHandler)
 	http.HandleFunc("/api/requirements/", server.requirementsAPIHandler)
+	http.HandleFunc("/api/methodology", server.methodologyHandler)
+	http.HandleFunc("/api/project-context/", server.projectContextHandler)
 	http.HandleFunc("/api/", server.apiHandler)
 
 	addr := fmt.Sprintf(":%d", port)
@@ -2451,4 +2453,109 @@ func (s *Server) generateRequirementKeyHandler(w http.ResponseWriter, r *http.Re
 		"success": true,
 		"key":     key,
 	})
+}
+
+// methodologyHandler handles GET and POST requests for methodology
+func (s *Server) methodologyHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	switch r.Method {
+	case http.MethodGet:
+		methodology, err := s.db.GetMethodology()
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Error retrieving methodology: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success":     true,
+			"methodology": methodology,
+		})
+
+	case http.MethodPost:
+		var body struct {
+			Methodology string `json:"methodology"`
+		}
+
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, fmt.Sprintf("Invalid request body: %v", err), http.StatusBadRequest)
+			return
+		}
+
+		if err := s.db.SaveMethodology(body.Methodology); err != nil {
+			http.Error(w, fmt.Sprintf("Error saving methodology: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": true,
+			"message": "Methodology saved successfully",
+		})
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// projectContextHandler handles GET and POST requests for project context
+func (s *Server) projectContextHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	// Extract project key from URL path: /api/project-context/{projectKey}
+	path := strings.TrimPrefix(r.URL.Path, "/api/project-context/")
+	projectKey := strings.Split(path, "/")[0]
+
+	if projectKey == "" {
+		http.Error(w, "Project key required", http.StatusBadRequest)
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		project, err := s.db.GetProjectByKey(projectKey)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Error retrieving project: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		if project == nil {
+			http.Error(w, "Project not found", http.StatusNotFound)
+			return
+		}
+
+		context := ""
+		if project.ProjectContext != nil {
+			context = *project.ProjectContext
+		}
+
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": true,
+			"project_key": projectKey,
+			"context": context,
+		})
+
+	case http.MethodPost:
+		var body struct {
+			Context string `json:"context"`
+		}
+
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, fmt.Sprintf("Invalid request body: %v", err), http.StatusBadRequest)
+			return
+		}
+
+		if err := s.db.SaveProjectContext(projectKey, body.Context); err != nil {
+			http.Error(w, fmt.Sprintf("Error saving project context: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": true,
+			"message": "Project context saved successfully",
+			"project_key": projectKey,
+		})
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
 }
